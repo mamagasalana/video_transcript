@@ -25,22 +25,18 @@ ch.setFormatter(formatter)
 root.addHandler(ch)
 
 # 1. Choose model size: "tiny", "base", "small", "medium", "large-v2"
-model_size = "medium"
+model_size = "large-v3-turbo"
 
 # 2. Load model on GPU
-# model = WhisperModel(
-#     model_size,
-#     device="cuda",        # "cuda" for GPU, "cpu" if no GPU
-#     compute_type="float16"  # good balance of speed+accuracy on RTX GPUs
-# )
-
 model = WhisperModel(
     model_size,
-    device="cpu",
-    compute_type="int8",  # fastest on CPU, acceptable accuracy drop
+    device="cuda",        # "cuda" for GPU, "cpu" if no GPU
+    compute_type="float16"  # good balance of speed+accuracy on RTX GPUs
 )
 
-for video_path in glob.glob('/mnt/c/Users/pokes/Downloads/*.mp4'):
+os.makedirs('transcript' , exist_ok=True)
+
+for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
 
     if '【' not in video_path:
         continue
