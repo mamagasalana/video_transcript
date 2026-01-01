@@ -1,2 +1,3 @@
 transcript/*.txt
 .env
+result/*.json
