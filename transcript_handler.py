@@ -32,13 +32,21 @@ Rules about metadata:
 
 Schema (must match exactly):
 {
-  "economic_theories":[{"raw":string, "normalized":string|null, "confidence":number, "evidence":string, "note":string|null}],
-  "economic_data":[{"raw":string, "normalized":string|null, "confidence":number, "frequency":string|null, "evidence":string, "note":string|null}],
-  "derived_data":[{"formula":string, "inputs":[string], "evidence":string}],
-  "instruments":[{"raw":string, "normalized":string|null, "confidence":number, "prediction":string|null, "horizon":string|null, "levels":string|null, "evidence":string, "note":string|null}],
-  "historical_events":[{"raw":string, "normalized":string|null, "confidence":number, "date":string|null, "evidence":string, "note":string|null}],
-  "reports_used":[{"raw":string, "normalized":string|null, "publisher":string|null, "date":string|null, "confidence":number, "evidence":string, "note":string|null}]
+  "economic_theories":[{"raw":string,"normalized":string|null,"confidence":number,"evidence":string,"note":string|null}],
+  "economic_data":[{"indicator_raw":string,"indicator_normalized":string|null,"value":string|null,"unit":string|null,"frequency":string|null,"confidence":number,"evidence":string,"note":string|null}],
+  "derived_data":[{"raw":string,"normalized":string|null,"confidence":number,"formula":string|null,"inputs":[string],"value":string|null,"unit":string|null,"evidence":string,"note":string|null}],
+  "instruments":[{"instrument_raw":string,"instrument_normalized":string|null,"prediction":string|null,"direction":"up|down|neutral"|null,"target_or_level":string|null,"horizon":string|null,"confidence":number,"evidence":string,"note":string|null}],
+  "historical_events":[{"raw":string,"normalized":string|null,"confidence":number,"date":string|null,"evidence":string,"note":string|null}],
+  "reports_used":[{"raw":string,"normalized":string|null,"publisher":string|null,"date":string|null,"confidence":number,"evidence":string,"note":string|null}]
 }
+
+
+IMPORTANT (economic_data):
+- "indicator_raw" must be the NAME of the economic indicator, not a number.
+- Examples:
+  - Correct: indicator_raw="美國股市本益比", value="21.7", unit="倍"
+  - Incorrect: indicator_raw="21.7倍"
+- Numeric values must go into "value".
 
 Transcript may contain ASR typos (homophones).
 Normalization rules:
