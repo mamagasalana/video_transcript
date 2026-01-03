@@ -98,20 +98,19 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript: str) -> Dict[str, 
 
 def normalize_zh_transcript(text: str) -> str:
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    # 先把很多空行壓成雙換行（段落）
     text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
 
     lines = [ln.strip() for ln in text.split("\n")]
     out = []
     for ln in lines:
         if not ln:
-            out.append("")  # 段落分隔
+            out.append("")  
             continue
         if not out or out[-1] == "":
             out.append(ln)
             continue
 
-        # 若上一行不像一句話結尾，就合併
+        
         if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
             out[-1] = out[-1] + " " + ln
         else:

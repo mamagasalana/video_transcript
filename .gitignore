@@ -2,3 +2,4 @@ transcript/*.txt
 .env
 result/*.json
 *ipynb
+__pycache__/*
