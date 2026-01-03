@@ -1,3 +1,4 @@
 transcript/*.txt
 .env
 result/*.json
+*ipynb

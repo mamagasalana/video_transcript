@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import glob
 import json
@@ -6,6 +7,9 @@ from typing import Any, Dict, Optional
 import time
 import re
 from llama_cpp import Llama
+from schemas import SCHEMA_ECON_THEORY_INSTRUCTIONS, SCHEMA_ECON_DATA_INSTRUCTIONS, SCHEMA_REPORT_INSTRUCTIONS, SCHEMA_HIST_EVENTS_INSTRUCTIONS, SCHEMA_INSTRUMENT_OUTLOOK_INSTRUCTIONS
+from tqdm import tqdm
+import re
 
 MODEL_PATH = os.getenv('MODEL_PATH')
 TRANSCRIPT_GLOB = "transcript/*.txt"  
@@ -17,49 +21,41 @@ TEMP = 0.2
 OVERWRITE = False
 
 
-SCHEMA_INSTRUCTIONS = r"""
-You are an information extraction system for Mandarin financial video transcripts.
-Extract ONLY what is explicitly stated in the transcript. Do not invent facts.
-Return valid JSON ONLY (no markdown, no commentary, no code fences).
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
 
-Known metadata (for reference only; do NOT infer new facts from it):
-- program: 金錢報
-- host: 世光
-- members: 金鐵桿
-Rules about metadata:
-- Use metadata ONLY to label speakers/program if the transcript is ambiguous.
-- Do NOT add theories/data/events/instruments unless they appear in the transcript.
+print('loading model')
+start = time.time()
+llm = Llama(
+    model_path=MODEL_PATH,
+    n_ctx=CTX,
+    n_gpu_layers=GPU_LAYERS,
+    verbose=False,
+)
+print('done loading model, time taken: %.2f' % (time.time()-  start))
 
-Schema (must match exactly):
-{
-  "economic_theories":[{"raw":string,"normalized":string|null,"confidence":number,"evidence":string,"note":string|null}],
-  "economic_data":[{"indicator_raw":string,"indicator_normalized":string|null,"value":string|null,"unit":string|null,"frequency":string|null,"confidence":number,"evidence":string,"note":string|null}],
-  "derived_data":[{"raw":string,"normalized":string|null,"confidence":number,"formula":string|null,"inputs":[string],"value":string|null,"unit":string|null,"evidence":string,"note":string|null}],
-  "instruments":[{"instrument_raw":string,"instrument_normalized":string|null,"prediction":string|null,"direction":"up|down|neutral"|null,"target_or_level":string|null,"horizon":string|null,"confidence":number,"evidence":string,"note":string|null}],
-  "historical_events":[{"raw":string,"normalized":string|null,"confidence":number,"date":string|null,"evidence":string,"note":string|null}],
-  "reports_used":[{"raw":string,"normalized":string|null,"publisher":string|null,"date":string|null,"confidence":number,"evidence":string,"note":string|null}]
+SCHEMAS = {
+    "economic_theories": {
+        "instruction": SCHEMA_ECON_THEORY_INSTRUCTIONS,
+        "out_file": "economic_theories.json",
+    },
+    "economic_data": {
+        "instruction": SCHEMA_ECON_DATA_INSTRUCTIONS,
+        "out_file": "economic_data.json",
+    },
+    "research_reports_used": {
+        "instruction": SCHEMA_REPORT_INSTRUCTIONS,
+        "out_file": "research_reports_used.json",
+    },
+    "historical_events": {
+        "instruction": SCHEMA_HIST_EVENTS_INSTRUCTIONS,
+        "out_file": "historical_events.json",
+    },
+    "instrument_outlook": {
+        "instruction": SCHEMA_INSTRUMENT_OUTLOOK_INSTRUCTIONS,
+        "out_file": "instrument_outlook.json",
+    },
 }
-
-
-IMPORTANT (economic_data):
-- "indicator_raw" must be the NAME of the economic indicator, not a number.
-- Examples:
-  - Correct: indicator_raw="美國股市本益比", value="21.7", unit="倍"
-  - Incorrect: indicator_raw="21.7倍"
-- Numeric values must go into "value".
-
-Transcript may contain ASR typos (homophones).
-Normalization rules:
-- Always include the exact transcript phrase in "raw".
-- Only fill "normalized" if you are highly confident (>=0.8) about the intended entity.
-- If multiple candidates exist (e.g., 摩根大通 vs 摩根士丹利), set "normalized": null and explain ambiguity in "note".
-- Never silently replace an entity; preserve uncertainty.
-
-Rules:
-- evidence should be a short quote or faithful paraphrase from the transcript.
-- If missing/unclear, set the field to null (or empty list) and say why in evidence.
-- Do not guess dates. Use null if not explicitly provided.
-""".strip()
 
 
 def chunk_text(s: str, max_chars: int = 12000, overlap: int = 1000):
@@ -83,45 +79,9 @@ def chunk_text(s: str, max_chars: int = 12000, overlap: int = 1000):
         i += step
 
 
-
-def build_prompt(transcript: str) -> str:
-    return f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
-
-
-def extract_json(text: str) -> Optional[Dict[str, Any]]:
-    t = text.strip()
-    if t.startswith("{") and t.endswith("}"):
-        try:
-            return json.loads(t)
-        except Exception:
-            pass
-
-    start = text.find("{")
-    if start == -1:
-        return None
-
-    brace = 0
-    for i in range(start, len(text)):
-        if text[i] == "{":
-            brace += 1
-        elif text[i] == "}":
-            brace -= 1
-            if brace == 0:
-                candidate = text[start : i + 1].strip()
-                try:
-                    return json.loads(candidate)
-                except Exception:
-                    return None
-    return None
-
-
-def validate_shape(obj: Dict[str, Any]) -> bool:
-    required = ["economic_theories", "economic_data", "derived_data", "instruments", "historical_events"]
-    return all(k in obj for k in required)
-
-
-def run_extract(llm: Llama, transcript: str) -> Dict[str, Any]:
-    prompt = build_prompt(transcript)
+def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript: str) -> Dict[str, Any]:
+    prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
+    STOP = ["} {", "}\n{", "\n} {", "\n}\n{"]
 
     out = llm(
         prompt,
@@ -129,85 +89,64 @@ def run_extract(llm: Llama, transcript: str) -> Dict[str, Any]:
         temperature=TEMP,
         top_p=0.9,
         repeat_penalty=1.1,
-        stop=[],
+        stop=STOP,
+        seed=1234,
+
     )
-    text = out["choices"][0]["text"]
-
-    obj = extract_json(text)
-    if obj is not None and isinstance(obj, dict) and validate_shape(obj):
-        return obj
-
-    # one repair try
-    repair_prompt = (
-        SCHEMA_INSTRUCTIONS
-        + "\n\nYour previous output was invalid or not pure JSON.\n"
-          "Return ONLY valid JSON matching the schema.\n\n"
-        + "Transcript:\n<<<\n"
-        + transcript.strip()
-        + "\n>>>\n"
-    )
-    out2 = llm(
-        repair_prompt,
-        max_tokens=MAX_TOKENS,
-        temperature=0.0,
-        top_p=1.0,
-        repeat_penalty=1.1,
-        stop=[],
-    )
-    text2 = out2["choices"][0]["text"]
-    obj2 = extract_json(text2)
-    if obj2 is None or not isinstance(obj2, dict) or not validate_shape(obj2):
-        raise RuntimeError("Model did not return valid JSON (even after repair).")
-    return obj2
+    return out
 
 
-def main():
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+def normalize_zh_transcript(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # 先把很多空行壓成雙換行（段落）
+    text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
 
-    print('loading model')
-    start = time.time()
-    llm = Llama(
-        model_path=MODEL_PATH,
-        n_ctx=CTX,
-        n_gpu_layers=GPU_LAYERS,
-        verbose=False,
-    )
-    print('done loading model, time taken: %.2f' % (time.time()-  start))
-
-    os.makedirs("transcript", exist_ok=True)
-
-    for in_path in sorted(glob.glob(TRANSCRIPT_GLOB, recursive=True)):
-        # base, _ = os.path.splitext(in_path)
-        dt = re.findall('\d+', in_path)[0]
-        out_path = '%s%s.json' % (OUTPUT_PATH, dt)
-
-        if os.path.exists(out_path) and not OVERWRITE:
-            print(f"[SKIP] {out_path} exists")
+    lines = [ln.strip() for ln in text.split("\n")]
+    out = []
+    for ln in lines:
+        if not ln:
+            out.append("")  # 段落分隔
+            continue
+        if not out or out[-1] == "":
+            out.append(ln)
             continue
 
-        with open(in_path, "r", encoding="utf-8") as f:
-            transcript = f.read()
+        # 若上一行不像一句話結尾，就合併
+        if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
+            out[-1] = out[-1] + " " + ln
+        else:
+            out.append(ln)
 
-        if not transcript.strip():
-            print(f"[SKIP] empty transcript: {in_path}")
-            continue
+    text2 = "\n".join(out)
+    text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
+    return text2
 
-        chunks = list(chunk_text(transcript, max_chars=8000, overlap=800))
-        all_outputs = []
+for in_path in tqdm(sorted(glob.glob(TRANSCRIPT_GLOB))):
+    # in_path = os.path.join('transcript/', '【20251229】.txt')
 
-        for idx, ch in enumerate(chunks, start=1):
-            try:
-                obj = run_extract(llm, ch)
-                all_outputs.append(obj)
-                print(f"  [CHUNK {idx}/{len(chunks)}] OK")
-            except Exception as e:
-                print(f"  [CHUNK {idx}/{len(chunks)}] ERR: {e}")
+    dt = re.findall('\d+', in_path)[0]
+    with open(in_path, "r", encoding="utf-8") as f:
+        transcript = f.read()
 
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump({"chunks": all_outputs}, f, ensure_ascii=False, indent=2)
-    print("Done.")
+    transcript2 = normalize_zh_transcript(transcript)
+    for theme, info in SCHEMAS.items():
+        start = time.time()
+        SCHEMA_INSTRUCTIONS = info['instruction']
+        outfile = os.path.join(OUTPUT_PATH, info['out_file'].replace('.json', '_%s.json' % dt))
+
+        ret = run_extract(llm , SCHEMA_INSTRUCTIONS, transcript2)
+
+        tmp = ret['choices'][0]['text']
+        try:
+            tmp2 = json.loads(tmp)
+            with open(outfile, "w", encoding="utf-8") as f:
+                json.dump(tmp2, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  [{dt}] [{theme}] ERR: {e}")
 
 
-if __name__ == "__main__":
-    main()
+
+
+
+
+
