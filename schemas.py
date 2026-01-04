@@ -467,3 +467,103 @@ Metadata rules:
 - Use metadata ONLY to disambiguate speaker attribution if needed.
 - Do NOT add events, instruments, or interpretations not present in the transcript.
 """.strip()
+
+
+
+
+SCHEMA_TOPIC_CHUNK_INSTRUCTIONS = r"""
+You are an information extraction system for Mandarin financial video transcripts.
+Split the provided transcript SLICE into coherent topic-based chunks that follow the host's discussion flow.
+
+IMPORTANT:
+- The provided text may be a continuation slice (not the full episode).
+- It may start/end mid-topic. Do NOT force an intro/outro.
+
+Extract ONLY what is explicitly present. Do not invent topics.
+
+OUTPUT FORMAT (strict):
+- Output EXACTLY ONE JSON object.
+- Output JSON only (no markdown, no commentary, no code fences).
+- Immediately after the final closing brace "}", output EXACTLY this token: <<END_JSON>>
+- After <<END_JSON>>, output NOTHING ELSE.
+
+JSON schema (keys must match exactly):
+{
+  "topic_chunks": [
+    {
+      "chunk_id": "",
+      "topic_label_raw": "",
+      "topic_label_normalized": null,
+      "start_anchor": "",
+      "end_anchor": "",
+      "summary": "",
+      "key_entities": [],
+      "key_indicators_mentioned": [],
+      "chunk_type": null,
+      "confidence": 0
+    }
+  ]
+}
+
+HARD RULES:
+
+A) Boundary gate (strict)
+Start a new chunk ONLY when there is a CLEAR topic transition.
+A transition is allowed only if at least ONE of the following holds:
+1) Explicit numbered agenda: "第一/第二/第三/第四/最后/最后一题"
+2) Explicit section shift phrase: "接下来我们看/我们再往下看/最后我们看/回到…/换个角度"
+3) The host explicitly announces a new target of analysis: "我们先看X/我们来看X/重点是X/第三题看X"
+   AND X is a new main subject (new event/asset/indicator/topic noun).
+
+ANTI-boundary (very important):
+- Do NOT start a new chunk for filler/connectors alone:
+  "好/那/所以/然后/再来/继续/同样逻辑/我们先看一下/我们看一下"
+- Do NOT split just because the text is long.
+
+B) No mid-topic split
+- If consecutive paragraphs continue the SAME main subject / same analysis frame,
+  they MUST stay in the SAME chunk.
+- Examples of "same analysis frame" (generic): continuing explanation of one mechanism, one historical story, one comparison, one indicator chain, one causal narrative.
+
+C) Chunk count per slice
+- Prefer 2-6 chunks per slice.
+- Prefer fewer coherent chunks over many small chunks.
+
+D) Coverage & order
+- Chunks must be contiguous, non-overlapping, ordered as in the provided text.
+- Must cover the entire provided slice. No gaps.
+
+E) Anchors (token control)
+- start_anchor and end_anchor MUST be exact substrings from the provided text.
+- Each anchor MUST be <= 20 Chinese characters.
+- Anchors must be short locator phrases, not full sentences.
+
+F) topic_label_raw (must be short and non-rambling)
+- MUST be filled.
+- MUST be <= 15 Chinese characters.
+- MUST be a short topic noun-phrase style label.
+- Prefer using a short phrase already present near the chunk start.
+- Do NOT copy long sentences. Do NOT include multiple clauses.
+
+G) summary (keep short)
+- 1–2 sentences max. Describe what is discussed, no new facts.
+
+H) key_entities / key_indicators_mentioned
+- key_entities: up to 8 items (people, places, orgs, assets).
+- key_indicators_mentioned: up to 8 items (indicator-like terms, ratios, policy terms).
+- Only include items explicitly mentioned.
+
+I) confidence MUST be one of: 0.3, 0.5, 0.7, 1.0
+- 1.0 = explicit numbered/section shift
+- 0.7 = clear new subject with explicit shift phrase
+- 0.5 = reasonable but subjective
+- 0.3 = weak (avoid)
+
+OUTPUT LENGTH SAFETY:
+- If close to output limit, output fewer chunks and keep fields short.
+- Never output partial JSON. If cannot finish safely, output {"topic_chunks": []}.
+
+Known metadata (reference only; do NOT infer facts):
+- program: 金錢報
+- host: 世光
+""".strip()
