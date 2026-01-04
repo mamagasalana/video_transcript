@@ -36,12 +36,13 @@ llm = Llama(
 print('done loading model, time taken: %.2f' % (time.time()-  start))
 
 
-def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript: str, seed=1234) -> Dict[str, Any]:
+def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234) -> Dict[str, Any]:
+    transcript= re.sub(r'\s+', ' ', transcript_raw).strip()
     prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
     STOP = ["<<END_JSON>>"]
     sz = len(llm.tokenize(prompt.encode('utf-8')))
     all_out= []
-    transcript= re.sub(r'\s+', ' ', transcript).strip()
+    
     if sz + MAX_TOKENS > CTX:
         i = 0
         while 1:
@@ -54,7 +55,7 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript: str, seed=1234) ->
                 break
             tmp = json.loads(out[0]['choices'][0]['text'])
             i = transcript.replace('\n', '').find(tmp['topic_chunks'][-1]['start_anchor'])
-            
+            assert i != -1, "%s not found" % tmp['topic_chunks'][-1]['start_anchor']
     else:
         out = llm(
             prompt,
@@ -99,6 +100,8 @@ def normalize_zh_transcript(text: str) -> str:
 for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     dt = re.findall('\d+', in_path)[0]
     out_path = '%stopic_%s.json' % (OUTPUT_PATH, dt)
+    if os.path.exists(out_path):
+        continue
 
     with open(in_path, "r", encoding="utf-8") as f:
         transcript = f.read()
