@@ -10,6 +10,10 @@ from llama_cpp import Llama
 import re
 from schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
 from tqdm import tqdm
+import sys
+from dotenv import load_dotenv
+
+load_dotenv()  # looks for .env in current working dir (or parents)
 
 MODEL_PATH = os.getenv('MODEL_PATH')
 TRANSCRIPT_GLOB = "transcript/*.txt"  
@@ -99,6 +103,10 @@ def normalize_zh_transcript(text: str) -> str:
 
 for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     dt = re.findall('\d+', in_path)[0]
+    if len(sys.argv)  > 1:
+        if dt != sys.argv[1]:
+            continue
+
     out_path = '%stopic_%s.json' % (OUTPUT_PATH, dt)
     if os.path.exists(out_path):
         continue
