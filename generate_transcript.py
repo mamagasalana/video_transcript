@@ -50,10 +50,17 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
     file_start = time.perf_counter()   # tic for this file
     print("Transcribing %s ... this may take a while." % dt)
     
+    prompt_zh = (
+        "这是普通话财经节目。请使用标准财经用语并准确转写机构与公司名称。"
+        "常见机构/公司：摩根大通、高盛、摩根士丹利、花旗、瑞银、瑞信、德意志银行、"
+        "贝莱德、桥水、富达、景顺；常见词：美联储、加息、降息、收益率、国债、基点、"
+        "通胀、CPI、GDP、EPS、PE、标普500、纳斯达克、道琼斯。"
+    )
     segments, info = model.transcribe(
         video_path,
         beam_size=5,
         vad_filter=False,   # turn off VAD
+        initial_prompt=prompt_zh,
         language="zh",
     )
 

@@ -12,6 +12,7 @@ from schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
+from normalize_transcript import NormFinder
 
 load_dotenv()  # looks for .env in current working dir (or parents)
 
@@ -46,7 +47,8 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
     STOP = ["<<END_JSON>>"]
     sz = len(llm.tokenize(prompt.encode('utf-8')))
     all_out= []
-    
+    nf = NormFinder(transcript)
+
     if sz + MAX_TOKENS > CTX:
         i = 0
         while 1:
@@ -58,7 +60,8 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
             if i+CHUNK_SIZE >= len(transcript):
                 break
             tmp = json.loads(out[0]['choices'][0]['text'])
-            i = transcript.replace('\n', '').find(tmp['topic_chunks'][-1]['start_anchor'])
+            anchor = tmp['topic_chunks'][-1]['start_anchor']
+            i = nf.find(anchor)
             assert i != -1, "%s not found" % tmp['topic_chunks'][-1]['start_anchor']
     else:
         out = llm(
@@ -130,5 +133,7 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
             json.dump(final_ret, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
+        with open('test.txt', 'w') as ofile:
+            ofile.write(transcript2)
         print(f"  [{dt}] ERR: {e}")
 

@@ -470,7 +470,6 @@ Metadata rules:
 
 
 
-
 SCHEMA_TOPIC_CHUNK_INSTRUCTIONS = r"""
 You are an information extraction system for Mandarin financial video transcripts.
 Split the provided transcript SLICE into coherent topic-based chunks that follow the host's discussion flow.
@@ -478,6 +477,11 @@ Split the provided transcript SLICE into coherent topic-based chunks that follow
 IMPORTANT:
 - The provided text may be a continuation slice (not the full episode).
 - It may start/end mid-topic. Do NOT force an intro/outro.
+- Output MUST preserve the original Chinese script found in the provided text.
+  * If the transcript slice is Traditional Chinese, output MUST be Traditional Chinese.
+  * If the transcript slice is Simplified Chinese, output MUST be Simplified Chinese.
+  * Do NOT convert between Traditional and Simplified Chinese.
+- Copy anchors EXACTLY from the provided text (verbatim substring copy; no rewriting).
 
 Extract ONLY what is explicitly present. Do not invent topics.
 
@@ -522,7 +526,7 @@ ANTI-boundary (very important):
 
 B) No mid-topic split
 - If consecutive paragraphs continue the SAME main subject / same analysis frame,
-  they MUST stay in the SAME chunk.
+  they MUST stay in the SAME_toggle chunk.
 - Examples of "same analysis frame" (generic): continuing explanation of one mechanism, one historical story, one comparison, one indicator chain, one causal narrative.
 
 C) Chunk count per slice
@@ -533,25 +537,34 @@ D) Coverage & order
 - Chunks must be contiguous, non-overlapping, ordered as in the provided text.
 - Must cover the entire provided slice. No gaps.
 
-E) Anchors (token control)
-- start_anchor and end_anchor MUST be exact substrings from the provided text.
+E) Anchors (token control + script fidelity)
+- start_anchor and end_anchor MUST be exact substrings copied from the provided text.
+- Anchors MUST preserve the original script exactly as it appears in the provided text:
+  * Do NOT change Traditional ↔ Simplified.
+  * Do NOT normalize characters, punctuation, spacing, or wording.
 - Each anchor MUST be <= 20 Chinese characters.
 - Anchors must be short locator phrases, not full sentences.
+- If you cannot find a <=20-character exact substring that works, choose a shorter exact substring.
+- If you are unsure of the exact characters for an anchor, set that anchor to "" (empty string) rather than guessing.
 
 F) topic_label_raw (must be short and non-rambling)
 - MUST be filled.
 - MUST be <= 15 Chinese characters.
 - MUST be a short topic noun-phrase style label.
 - Prefer using a short phrase already present near the chunk start.
+- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
 - Do NOT copy long sentences. Do NOT include multiple clauses.
 
-G) summary (keep short)
+G) summary (keep short + script fidelity)
 - 1–2 sentences max. Describe what is discussed, no new facts.
+- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
+- Do NOT paraphrase into a different script.
 
 H) key_entities / key_indicators_mentioned
 - key_entities: up to 8 items (people, places, orgs, assets).
 - key_indicators_mentioned: up to 8 items (indicator-like terms, ratios, policy terms).
 - Only include items explicitly mentioned.
+- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
 
 I) confidence MUST be one of: 0.3, 0.5, 0.7, 1.0
 - 1.0 = explicit numbered/section shift
