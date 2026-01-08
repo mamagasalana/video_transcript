@@ -469,27 +469,18 @@ Metadata rules:
 """.strip()
 
 
-
 SCHEMA_TOPIC_CHUNK_INSTRUCTIONS = r"""
-You are an information extraction system for Mandarin financial video transcripts.
-Split the provided transcript SLICE into coherent topic-based chunks that follow the host's discussion flow.
-
-IMPORTANT:
-- The provided text may be a continuation slice (not the full episode).
-- It may start/end mid-topic. Do NOT force an intro/outro.
-- Output MUST preserve the original Chinese script found in the provided text.
-  * If the transcript slice is Traditional Chinese, output MUST be Traditional Chinese.
-  * If the transcript slice is Simplified Chinese, output MUST be Simplified Chinese.
-  * Do NOT convert between Traditional and Simplified Chinese.
-- Copy anchors EXACTLY from the provided text (verbatim substring copy; no rewriting).
-
-Extract ONLY what is explicitly present. Do not invent topics.
-
-OUTPUT FORMAT (strict):
+RETURN FORMAT (STRICT):
 - Output EXACTLY ONE JSON object.
-- Output JSON only (no markdown, no commentary, no code fences).
-- Immediately after the final closing brace "}", output EXACTLY this token: <<END_JSON>>
-- After <<END_JSON>>, output NOTHING ELSE.
+- Do NOT output the word "JSON".
+- After the final closing brace "}", output EXACTLY: <<END_JSON>>
+- After <<END_JSON>> output NOTHING (no newlines, no extra text, no second JSON).
+
+Example ending (must match):
+}<<END_JSON>>
+
+TASK:
+Split the provided Simplified-Chinese transcript SLICE into coherent topic chunks.
 
 JSON schema (keys must match exactly):
 {
@@ -509,74 +500,32 @@ JSON schema (keys must match exactly):
   ]
 }
 
-HARD RULES:
+RULES (short + strict):
 
-A) Boundary gate (strict)
-Start a new chunk ONLY when there is a CLEAR topic transition.
-A transition is allowed only if at least ONE of the following holds:
-1) Explicit numbered agenda: "第一/第二/第三/第四/最后/最后一题"
-2) Explicit section shift phrase: "接下来我们看/我们再往下看/最后我们看/回到…/换个角度"
-3) The host explicitly announces a new target of analysis: "我们先看X/我们来看X/重点是X/第三题看X"
-   AND X is a new main subject (new event/asset/indicator/topic noun).
+1) Boundaries:
+Start a new chunk ONLY on a clear topic switch:
+- 第一/第二/第三/第四/最后/最后一题
+- 接下来我们看 / 我们再往下看 / 最后我们看 / 回到… / 换个角度
+- 我们先看X / 我们来看X / 重点是X / 第三题看X (X is a new main subject)
+Do NOT split on fillers: 好/那/所以/然后/再来/继续/我们先看一下/我们看一下
 
-ANTI-boundary (very important):
-- Do NOT start a new chunk for filler/connectors alone:
-  "好/那/所以/然后/再来/继续/同样逻辑/我们先看一下/我们看一下"
-- Do NOT split just because the text is long.
+2) Coverage:
+Chunks are contiguous, ordered, no gaps. Prefer 2–6 chunks.
 
-B) No mid-topic split
-- If consecutive paragraphs continue the SAME main subject / same analysis frame,
-  they MUST stay in the SAME_toggle chunk.
-- Examples of "same analysis frame" (generic): continuing explanation of one mechanism, one historical story, one comparison, one indicator chain, one causal narrative.
+3) Anchors (MOST IMPORTANT):
+- start_anchor and end_anchor MUST be exact substrings from the provided text (copy-only).
+- Anchor length MUST be 8–16 Chinese characters.
+- If you cannot find a valid 8–16 char exact substring, set anchor to "".
+- Do NOT output long anchors. Do NOT output full sentences.
 
-C) Chunk count per slice
-- Prefer 2-6 chunks per slice.
-- Prefer fewer coherent chunks over many small chunks.
+4) topic_label_raw:
+<=15 Chinese characters, noun-phrase style, short.
 
-D) Coverage & order
-- Chunks must be contiguous, non-overlapping, ordered as in the provided text.
-- Must cover the entire provided slice. No gaps.
+5) summary:
+1–2 sentences, no new facts.
 
-E) Anchors (token control + script fidelity)
-- start_anchor and end_anchor MUST be exact substrings copied from the provided text.
-- Anchors MUST preserve the original script exactly as it appears in the provided text:
-  * Do NOT change Traditional ↔ Simplified.
-  * Do NOT normalize characters, punctuation, spacing, or wording.
-- Each anchor MUST be <= 20 Chinese characters.
-- Anchors must be short locator phrases, not full sentences.
-- If you cannot find a <=20-character exact substring that works, choose a shorter exact substring.
-- If you are unsure of the exact characters for an anchor, set that anchor to "" (empty string) rather than guessing.
+6) key lists:
+Up to 8 items each; only explicit mentions.
 
-F) topic_label_raw (must be short and non-rambling)
-- MUST be filled.
-- MUST be <= 15 Chinese characters.
-- MUST be a short topic noun-phrase style label.
-- Prefer using a short phrase already present near the chunk start.
-- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
-- Do NOT copy long sentences. Do NOT include multiple clauses.
-
-G) summary (keep short + script fidelity)
-- 1–2 sentences max. Describe what is discussed, no new facts.
-- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
-- Do NOT paraphrase into a different script.
-
-H) key_entities / key_indicators_mentioned
-- key_entities: up to 8 items (people, places, orgs, assets).
-- key_indicators_mentioned: up to 8 items (indicator-like terms, ratios, policy terms).
-- Only include items explicitly mentioned.
-- MUST preserve the original script found in the provided text (no Traditional/Simplified conversion).
-
-I) confidence MUST be one of: 0.3, 0.5, 0.7, 1.0
-- 1.0 = explicit numbered/section shift
-- 0.7 = clear new subject with explicit shift phrase
-- 0.5 = reasonable but subjective
-- 0.3 = weak (avoid)
-
-OUTPUT LENGTH SAFETY:
-- If close to output limit, output fewer chunks and keep fields short.
-- Never output partial JSON. If cannot finish safely, output {"topic_chunks": []}.
-
-Known metadata (reference only; do NOT infer facts):
-- program: 金錢報
-- host: 世光
+7) confidence in {0.3, 0.5, 0.7, 1.0}.
 """.strip()

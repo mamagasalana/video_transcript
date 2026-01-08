@@ -13,8 +13,10 @@ from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
 from normalize_transcript import NormFinder
+from opencc import OpenCC
 
 load_dotenv()  # looks for .env in current working dir (or parents)
+to_simplified = OpenCC("t2s") 
 
 MODEL_PATH = os.getenv('MODEL_PATH')
 TRANSCRIPT_GLOB = "transcript/*.txt"  
@@ -61,8 +63,8 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
                 break
             tmp = json.loads(out[0]['choices'][0]['text'])
             anchor = tmp['topic_chunks'][-1]['start_anchor']
-            i = nf.find(anchor)
-            assert i != -1, "%s not found" % tmp['topic_chunks'][-1]['start_anchor']
+            i = nf.find(to_simplified.convert(anchor))
+            assert i != -1, tmp['topic_chunks'][-1]['start_anchor']
     else:
         out = llm(
             prompt,
@@ -102,7 +104,7 @@ def normalize_zh_transcript(text: str) -> str:
 
     text2 = "\n".join(out)
     text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
-    return text2
+    return to_simplified.convert(text2)
 
 for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     dt = re.findall('\d+', in_path)[0]
