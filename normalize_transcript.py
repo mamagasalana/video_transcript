@@ -33,10 +33,10 @@ class NormFinder:
     def find(self, needle: str, start_norm: int = 0) -> int:
         needle_n = self.normalize(needle)
         if not needle_n:
-            return -1
+            return -1, -1
 
         j = self.norm.find(needle_n, start_norm)
         if j == -1:
-            return -1
+            return -1, -1
 
-        return self.norm2raw[j]
+        return j, self.norm2raw[j]

@@ -47,67 +47,67 @@ def clean_think(txt):
     start_idx = 0
     if '</think>' in txt:
         start_idx = txt.find('</think>')
-    return txt[start_idx:]
 
-def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234) -> Dict[str, Any]:
+    return re.findall(r'([\u4e00-\u9fff].*?)<<IWANTTOREST>>', txt[start_idx:])[0]
+
+def extract(prompt):
+    STOP = []
+    out = llm(
+        prompt,
+        max_tokens= MAX_TOKENS,
+        temperature=TEMP,
+        top_p=0.9,
+        repeat_penalty=1.1,
+        stop=STOP,
+        seed=SEED,
+
+    )
+    
+    try:
+        tmp = clean_think(out['choices'][0]['text'])
+        out['js'] =  tmp
+    except Exception as e:
+
+        with open("test.txt", "w", encoding="utf-8") as f:
+            f.write(out["choices"][0]["text"])
+        with open("test.txt", "a", encoding="utf-8") as f:
+            f.write('\n')
+            f.write(json.dumps(out.get("usage", {})))
+        print('debug')
+
+    return out
+    
+def run_extract(SCHEMA_INSTRUCTIONS,  transcript_raw: str) -> Dict[str, Any]:
     transcript= re.sub(r'\s+', ' ', transcript_raw).strip()
-    prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
-    STOP = ["<<END_ANCHOR>>"]
-    sz = len(llm.tokenize(prompt.encode('utf-8')))
+    # STOP = ["<<IWANTTOREST>>"]
     all_out= []
     nf = NormFinder(transcript)
 
-    if sz + MAX_TOKENS > CTX:
-        i = 0
-        attempt= 1
-        debug_attempt = {}
-        while attempt:
-            out = run_extract(llm, SCHEMA_INSTRUCTIONS, transcript[i:i+CHUNK_SIZE], seed=seed)
-            debug_attempt[attempt] = i
-            out[0]['start_index'] = i
-            out[0]['end_index'] = min(i+CHUNK_SIZE, len(transcript)-1)
-            tmp = out[0]['js']
+    i = 0
+    next_norm_idx = 0
+    attempt= 1
+    debug_attempt = {}
+    while attempt:
 
-            all_out.extend(out)
-            if i+CHUNK_SIZE >= len(transcript):
-                break
-            
-            anchor = tmp['topic_chunks'][-1]['start_anchor']
-            i = nf.find(to_simplified.convert(anchor))
-            try:
-                assert i != -1, tmp['topic_chunks'][-1]['start_anchor']
-            except:
-                with open("test.txt", "w", encoding="utf-8") as f:
-                    f.write(transcript[debug_attempt[attempt]:debug_attempt[attempt]+CHUNK_SIZE])
-                print('debug')
-            
-            attempt+=1
-    else:
-        out = llm(
-            prompt,
-            max_tokens= MAX_TOKENS,
-            temperature=TEMP,
-            top_p=0.9,
-            repeat_penalty=1.1,
-            stop=STOP,
-            seed=seed,
-
-        )
-        
-        try:
-            tmp = clean_think(out['choices'][0]['text'])
-            out['js'] =  json.loads(tmp)
-        except:
-
-            with open("test.txt", "w", encoding="utf-8") as f:
-                f.write(out["choices"][0]["text"])
-            with open("test.txt", "a", encoding="utf-8") as f:
-                f.write('\n')
-                f.write(json.dumps(out.get("usage", {})))
-            print('debug')
-        out['start_index'] = 0
-        out['end_index'] = len(transcript)-1
+        prompt =  f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript[i:i+CHUNK_SIZE].strip()}\n>>>\n"
+        out = extract(prompt)
+        debug_attempt[attempt] = i
+                
+        anchor = out['js']
+        next_norm_idx, next_original_idx = nf.find(to_simplified.convert(anchor), next_norm_idx)
+        out.update( {'start_index': i, 
+                      'end_index': next_original_idx})
         all_out.append(out)
+        try:
+            assert next_original_idx != -1, anchor
+        except:
+            with open("test.txt", "w", encoding="utf-8") as f:
+                f.write(transcript[debug_attempt[attempt]:debug_attempt[attempt]+CHUNK_SIZE])
+            print('debug')
+        
+        attempt+=1
+        i= next_original_idx
+
     return all_out
 
 
@@ -150,15 +150,12 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     transcript2 = normalize_zh_transcript(transcript)
 
     try:
-        all_ret  = run_extract(llm , END_ANCHOR_ONLY_INSTRUCTIONS, transcript2, seed=SEED)
+        all_ret  = run_extract(END_ANCHOR_ONLY_INSTRUCTIONS, transcript2)
 
         final_ret = []
         for ret in all_ret:
             js = ret['js']
-            if final_ret:
-                final_ret.pop() # remove last one if exist
-            for j in js['topic_chunks']:
-                final_ret.append(j)
+            final_ret.append(js)
         
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(final_ret, f, ensure_ascii=False, indent=2)

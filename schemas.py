@@ -528,38 +528,34 @@ Very short transcripts may have 1 chunk.
 Up to 8 items each; only explicit mentions.
 """.strip()
 
-
 END_ANCHOR_ONLY_INSTRUCTIONS = r"""
 You are an information extraction system for Mandarin financial analyst video transcripts.
-Extract ONLY what is explicitly present in the transcript text.
+Extract ONLY what is explicitly present in the transcript text. Do not invent facts. Do not paraphrase transcript text.
+
 
 GOAL:
 - Identify the FIRST coherent topic discussed from the beginning (ignore greetings/admin if they are not the topic).
-- Find the point where the first topic ends (topic switch or first topic completes).
-- Output ONLY ONE SHORT end anchor taken from near that cutoff point.
+- Find the cutoff point where the first topic ends (topic switch or first topic completes).
+- Output ONE short <END_ANCHOR>
 
-OUTPUT RULES (strict):
-- Output EXACTLY: <end_anchor><<END_ANCHOR>>
-- Output MUST be a single line, with NO newline characters.
-- Output NOTHING ELSE: no quotes, no labels, no spaces, no punctuation added, no extra tokens.
+OUTPUT FORMAT (strict):
+- Output MUST be exactly ONE line (no newline characters).
+- Output MUST follow this exact pattern:
+  <END_ANCHOR><<IWANTTOREST>>
+- Output NOTHING ELSE: no quotes, no labels, no markdown, no extra spaces.
 
-HARD LENGTH LIMIT (most important):
-- end_anchor MUST be 8 to 20 Chinese characters ONLY.
-- DO NOT output more than 20 Chinese characters under any circumstance.
-- DO NOT output the whole sentence/paragraph. Pick a short span.
-
-END ANCHOR CONTENT RULES:
-- end_anchor MUST be an exact contiguous substring copied from the transcript.
-- end_anchor MUST come from the last 1–2 sentences before the cutoff boundary.
-- Prefer a distinctive phrase (avoid very common fillers like “然后我们” unless unavoidable).
-- Preserve characters exactly as in transcript.
+END_ANCHOR RULES (critical):
+- <END_ANCHOR> MUST be an exact contiguous substring copied from the transcript.
+- Length MUST be 20 to 30 Chinese characters ONLY.
+- Do NOT add, remove, or substitute any character
+- Preserve transcript characters exactly (including punctuation/spaces if they are inside the chosen span).
+- Choose it from the last 1–2 sentences before the cutoff boundary.
 
 ANTI-COPY RULE:
-- NEVER copy multiple sentences or multiple lines.
-- NEVER continue copying transcript text after selecting the end_anchor.
-- After printing end_anchor, immediately print the stop token <<END_ANCHOR>> and STOP.
+- NEVER output the whole transcript.
+- After printing <END_ANCHOR>, immediately print <<IWANTTOREST>> and STOP.
 
 FAILSAFE:
-- If the transcript is empty OR you cannot find a cutoff, output exactly:
-文本不足<<END_ANCHOR>>
+- If transcript is empty OR cutoff is unclear, output exactly:
+文本不足|||文本不足|||文本不足<<IWANTTOREST>>
 """.strip()
