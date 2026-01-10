@@ -8,7 +8,7 @@ import time
 import re
 from llama_cpp import Llama
 import re
-from schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
+from schemas import END_ANCHOR_ONLY_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
@@ -46,15 +46,13 @@ print('done loading model, time taken: %.2f' % (time.time()-  start))
 def clean_think(txt):
     start_idx = 0
     if '</think>' in txt:
-        start_idx = txt.find('{')
-    start_idx = txt.find('{', start_idx)
-    assert start_idx != -1, "not valid json format"
+        start_idx = txt.find('</think>')
     return txt[start_idx:]
 
 def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234) -> Dict[str, Any]:
     transcript= re.sub(r'\s+', ' ', transcript_raw).strip()
     prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
-    STOP = ["<<END_JSON>>"]
+    STOP = ["<<END_ANCHOR>>"]
     sz = len(llm.tokenize(prompt.encode('utf-8')))
     all_out= []
     nf = NormFinder(transcript)
@@ -152,7 +150,7 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     transcript2 = normalize_zh_transcript(transcript)
 
     try:
-        all_ret  = run_extract(llm , SCHEMA_TOPIC_CHUNK_INSTRUCTIONS, transcript2, seed=SEED)
+        all_ret  = run_extract(llm , END_ANCHOR_ONLY_INSTRUCTIONS, transcript2, seed=SEED)
 
         final_ret = []
         for ret in all_ret:

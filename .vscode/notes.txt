@@ -1,2 +1,0 @@
-export CUDNN_PATH=/home/ytee/test/trade_bot/venv/lib/python3.12/site-packages/nvidia/cudnn/lib
-export LD_LIBRARY_PATH="$CUDNN_PATH:$LD_LIBRARY_PATH"

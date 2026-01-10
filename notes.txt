@@ -1,0 +1,25 @@
+## to download models
+## sample:
+mkdir -p /home/ytee3/models/Llama-3.1-8B-Instruct-GGUF
+hf download \
+  unsloth/Llama-3.1-8B-Instruct-GGUF \
+  --include "*Q6_K_XL*.gguf" \
+  --local-dir /home/ytee3/models/Llama-3.1-8B-Instruct-GGUF
+
+mkdir -p /home/ytee3/models/DeepSeek-R1-Distill-Qwen-14B-GGUF
+hf download \
+  unsloth/DeepSeek-R1-Distill-Qwen-14B-GGUF \
+  --include "*Q4_K*.gguf" \
+  --local-dir /home/ytee3/models/DeepSeek-R1-Distill-Qwen-14B-GGUF
+
+mkdir -p /home/ytee3/models/Qwen3-32B-128K-GGUF
+hf download \
+  unsloth/Qwen3-32B-128K-GGUF \
+  --include "*IQ1_M.gguf" \
+  --local-dir /home/ytee3/models/Qwen3-32B-128K-GGUF
+
+
+# update new video file
+cp --update=none ~/ysg_backup/*.mp4 /home/ytee/test/ysg_backup/
+
+rm result/*.json

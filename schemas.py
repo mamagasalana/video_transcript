@@ -482,7 +482,7 @@ Example ending (must match):
 TASK:
 Split the provided Simplified-Chinese transcript SLICE into coherent topic chunks.
 
-JSON schema (keys must match exactly):
+OUTPUT JSON schema (keys must match exactly; NO trailing commas):
 {
   "topic_chunks": [
     {
@@ -490,17 +490,14 @@ JSON schema (keys must match exactly):
       "topic_label_raw": "",
       "topic_label_normalized": null,
       "start_anchor": "",
-      "end_anchor": "",
       "summary": "",
       "key_entities": [],
-      "key_indicators_mentioned": [],
-      "chunk_type": null,
-      "confidence": 0
+      "key_indicators_mentioned": []
     }
   ]
 }
 
-RULES (short + strict):
+RULES:
 
 1) Boundaries:
 Start a new chunk ONLY on a clear topic switch:
@@ -510,13 +507,16 @@ Start a new chunk ONLY on a clear topic switch:
 Do NOT split on fillers: 好/那/所以/然后/再来/继续/我们先看一下/我们看一下
 
 2) Coverage:
-Chunks are contiguous, ordered, no gaps. Prefer 2–6 chunks.
+Chunks are contiguous, ordered, no gaps.
+Prefer 2–6 chunks WHEN the transcript length allows.
+Very short transcripts may have 1 chunk.
 
-3) Anchors (MOST IMPORTANT):
-- start_anchor and end_anchor MUST be exact substrings from the provided text (copy-only).
-- Anchor length MUST be 8–16 Chinese characters.
-- If you cannot find a valid 8–16 char exact substring, set anchor to "".
-- Do NOT output long anchors. Do NOT output full sentences.
+3) Start Anchors (MECHANICAL, 12 CJK CHARS):
+- Define "Chinese characters" as Unicode range [\u4e00-\u9fff].
+- start_anchor MUST be the first 12 characters in the chunk that match [\u4e00-\u9fff],
+  skipping any other characters (spaces, punctuation, numbers, Latin letters).
+- start_anchor MUST be copied verbatim from the transcript and MUST appear as a substring.
+- If the chunk contains fewer than 12 such characters, output "".
 
 4) topic_label_raw:
 <=15 Chinese characters, noun-phrase style, short.
@@ -526,6 +526,40 @@ Chunks are contiguous, ordered, no gaps. Prefer 2–6 chunks.
 
 6) key lists:
 Up to 8 items each; only explicit mentions.
+""".strip()
 
-7) confidence in {0.3, 0.5, 0.7, 1.0}.
+
+END_ANCHOR_ONLY_INSTRUCTIONS = r"""
+You are an information extraction system for Mandarin financial analyst video transcripts.
+Extract ONLY what is explicitly present in the transcript text.
+
+GOAL:
+- Identify the FIRST coherent topic discussed from the beginning (ignore greetings/admin if they are not the topic).
+- Find the point where the first topic ends (topic switch or first topic completes).
+- Output ONLY ONE SHORT end anchor taken from near that cutoff point.
+
+OUTPUT RULES (strict):
+- Output EXACTLY: <end_anchor><<END_ANCHOR>>
+- Output MUST be a single line, with NO newline characters.
+- Output NOTHING ELSE: no quotes, no labels, no spaces, no punctuation added, no extra tokens.
+
+HARD LENGTH LIMIT (most important):
+- end_anchor MUST be 8 to 20 Chinese characters ONLY.
+- DO NOT output more than 20 Chinese characters under any circumstance.
+- DO NOT output the whole sentence/paragraph. Pick a short span.
+
+END ANCHOR CONTENT RULES:
+- end_anchor MUST be an exact contiguous substring copied from the transcript.
+- end_anchor MUST come from the last 1–2 sentences before the cutoff boundary.
+- Prefer a distinctive phrase (avoid very common fillers like “然后我们” unless unavoidable).
+- Preserve characters exactly as in transcript.
+
+ANTI-COPY RULE:
+- NEVER copy multiple sentences or multiple lines.
+- NEVER continue copying transcript text after selecting the end_anchor.
+- After printing end_anchor, immediately print the stop token <<END_ANCHOR>> and STOP.
+
+FAILSAFE:
+- If the transcript is empty OR you cannot find a cutoff, output exactly:
+文本不足<<END_ANCHOR>>
 """.strip()
