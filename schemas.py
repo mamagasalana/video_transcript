@@ -507,16 +507,15 @@ Start a new chunk ONLY on a clear topic switch:
 Do NOT split on fillers: 好/那/所以/然后/再来/继续/我们先看一下/我们看一下
 
 2) Coverage:
-Chunks are contiguous, ordered, no gaps.
-Prefer 2–6 chunks WHEN the transcript length allows.
-Very short transcripts may have 1 chunk.
+- Chunks are contiguous, ordered, no gaps.
+- Prefer 2–6 chunks WHEN the transcript length allows.
+- Very short transcripts may have 1 chunk.
 
-3) Start Anchors (MECHANICAL, 12 CJK CHARS):
-- Define "Chinese characters" as Unicode range [\u4e00-\u9fff].
-- start_anchor MUST be the first 12 characters in the chunk that match [\u4e00-\u9fff],
-  skipping any other characters (spaces, punctuation, numbers, Latin letters).
-- start_anchor MUST be copied verbatim from the transcript and MUST appear as a substring.
-- If the chunk contains fewer than 12 such characters, output "".
+
+3) Start Anchors:
+- MUST be an exact contiguous substring copied from the transcript.
+- Length MUST be 30 to 40 Chinese characters ONLY.
+- Preserve transcript characters exactly (including punctuation/spaces if they are inside the chosen span).
 
 4) topic_label_raw:
 <=15 Chinese characters, noun-phrase style, short.

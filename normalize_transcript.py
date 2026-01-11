@@ -1,4 +1,7 @@
 from typing import List, Tuple
+import textwrap
+from collections import Counter
+
 
 class NormFinder:
     def __init__(self, raw: str):
@@ -40,3 +43,16 @@ class NormFinder:
             return -1, -1
 
         return j, self.norm2raw[j]
+
+    def find_by_chunk(self, needle: str, start_norm: int = 0, chunksize: int=10) -> int:
+        needle_n = self.normalize(needle)
+        needle_chunks = textwrap.wrap(needle_n, width=chunksize)
+        implied_starts= []
+        for idx, nc in enumerate(needle_chunks):
+            j = self.norm.find(nc, start_norm)
+            implied_starts.append(j - chunksize*idx)
+        
+        c = Counter(implied_starts)
+        # print(len(needle_n), implied_starts)
+        s_hat, votes = c.most_common(1)[0]
+        return s_hat, self.norm2raw[s_hat], votes , len(implied_starts), c

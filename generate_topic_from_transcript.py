@@ -28,6 +28,8 @@ TEMP = 0.2
 OVERWRITE = False
 CHUNK_SIZE = 6000
 SEED = 1234
+STOP = ["<<END_JSON>>"]
+STOP = []
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
@@ -46,70 +48,76 @@ print('done loading model, time taken: %.2f' % (time.time()-  start))
 def clean_think(txt):
     start_idx = 0
     if '</think>' in txt:
-        start_idx = txt.find('{')
+        start_idx = txt.find('</think>')
     start_idx = txt.find('{', start_idx)
     assert start_idx != -1, "not valid json format"
-    return txt[start_idx:]
+    end_idx = txt.find('<<END_JSON>>', start_idx)
+    return txt[start_idx:end_idx], txt[:start_idx]
+
+def extract(prompt):
+    out = llm(
+        prompt,
+        max_tokens= MAX_TOKENS,
+        temperature=TEMP,
+        top_p=0.9,
+        repeat_penalty=1.1,
+        stop=STOP,
+        seed=SEED,
+    )
+    
+    try:
+        tmp, think = clean_think(out['choices'][0]['text'])
+        out['js'] =  json.loads(tmp)
+        out['think'] = think
+    except:
+        with open("test.txt", "w", encoding="utf-8") as f:
+            f.write(out["choices"][0]["text"])
+        with open("test.txt", "a", encoding="utf-8") as f:
+            f.write('\n')
+            f.write(json.dumps(out.get("usage", {})))
+        print('debug')
+    return out
 
 def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234) -> Dict[str, Any]:
     transcript= re.sub(r'\s+', ' ', transcript_raw).strip()
-    prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript.strip()}\n>>>\n"
-    STOP = ["<<END_JSON>>"]
-    sz = len(llm.tokenize(prompt.encode('utf-8')))
-    all_out= []
+    
     nf = NormFinder(transcript)
 
-    if sz + MAX_TOKENS > CTX:
-        i = 0
-        attempt= 1
-        debug_attempt = {}
-        while attempt:
-            out = run_extract(llm, SCHEMA_INSTRUCTIONS, transcript[i:i+CHUNK_SIZE], seed=seed)
-            debug_attempt[attempt] = i
-            out[0]['start_index'] = i
-            out[0]['end_index'] = min(i+CHUNK_SIZE, len(transcript)-1)
-            tmp = out[0]['js']
+    i = 0
+    norm_i = 0
+    attempt= 1
+    debug_attempt = {}
+    all_out= []
 
-            all_out.extend(out)
-            if i+CHUNK_SIZE >= len(transcript):
-                break
-            
-            anchor = tmp['topic_chunks'][-1]['start_anchor']
-            i = nf.find(to_simplified.convert(anchor))
-            try:
-                assert i != -1, tmp['topic_chunks'][-1]['start_anchor']
-            except:
-                with open("test.txt", "w", encoding="utf-8") as f:
-                    f.write(transcript[debug_attempt[attempt]:debug_attempt[attempt]+CHUNK_SIZE])
-                print('debug')
-            
-            attempt+=1
-    else:
-        out = llm(
-            prompt,
-            max_tokens= MAX_TOKENS,
-            temperature=TEMP,
-            top_p=0.9,
-            repeat_penalty=1.1,
-            stop=STOP,
-            seed=seed,
-
-        )
+    while attempt:
+        prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript[i:i+CHUNK_SIZE].strip()}\n>>>\n"
+        out = extract(prompt)
+        debug_attempt[attempt] = i
+        tmp = out['js']
         
-        try:
-            tmp = clean_think(out['choices'][0]['text'])
-            out['js'] =  json.loads(tmp)
-        except:
+        for chunk in tmp['topic_chunks']:
+            start_anchor = chunk['start_anchor']
+            raw_i, norm_i, votes, total_votes, debug_extra = nf.find_by_chunk(to_simplified.convert(start_anchor), norm_i, 5)
+            chunk['votes'] =  votes
+            chunk['total_votes'] =  total_votes
+            chunk['start_idx'] = raw_i
 
-            with open("test.txt", "w", encoding="utf-8") as f:
-                f.write(out["choices"][0]["text"])
-            with open("test.txt", "a", encoding="utf-8") as f:
-                f.write('\n')
-                f.write(json.dumps(out.get("usage", {})))
-            print('debug')
-        out['start_index'] = 0
-        out['end_index'] = len(transcript)-1
+            if raw_i == -1:
+                with open("transcript.txt", "w", encoding="utf-8") as f:
+                    f.write(transcript)
+                with open("think.txt", "w", encoding="utf-8") as f:
+                    f.write(out['think'])
+                with open('debug.json', 'w') as ofile:
+                    json.dump(tmp, ofile)
+                print('debug')
+                assert raw_i != -1, start_anchor
+        
+        attempt+=1
         all_out.append(out)
+        if i+CHUNK_SIZE >= len(transcript):
+            break
+        i = raw_i
+
     return all_out
 
 
