@@ -3,6 +3,5 @@ transcript/*.txt
 result/*.json
 *ipynb
 __pycache__/*
-test*.txt
-debug.json
-transcript.txt
+*.json
+*.txt

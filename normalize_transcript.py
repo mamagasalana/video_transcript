@@ -50,7 +50,9 @@ class NormFinder:
         implied_starts= []
         for idx, nc in enumerate(needle_chunks):
             j = self.norm.find(nc, start_norm)
-            implied_starts.append(j - chunksize*idx)
+            if j != -1:
+                j-=chunksize*idx
+            implied_starts.append(j)
         
         c = Counter(implied_starts)
         # print(len(needle_n), implied_starts)

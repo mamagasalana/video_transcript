@@ -475,9 +475,7 @@ RETURN FORMAT (STRICT):
 - Do NOT output the word "JSON".
 - After the final closing brace "}", output EXACTLY: <<END_JSON>>
 - After <<END_JSON>> output NOTHING (no newlines, no extra text, no second JSON).
-
-Example ending (must match):
-}<<END_JSON>>
+Example ending (must match): }<<END_JSON>>
 
 TASK:
 Split the provided Simplified-Chinese transcript SLICE into coherent topic chunks.
@@ -500,11 +498,7 @@ OUTPUT JSON schema (keys must match exactly; NO trailing commas):
 RULES:
 
 1) Boundaries:
-Start a new chunk ONLY on a clear topic switch:
-- 第一/第二/第三/第四/最后/最后一题
-- 接下来我们看 / 我们再往下看 / 最后我们看 / 回到… / 换个角度
-- 我们先看X / 我们来看X / 重点是X / 第三题看X (X is a new main subject)
-Do NOT split on fillers: 好/那/所以/然后/再来/继续/我们先看一下/我们看一下
+- Start a new chunk ONLY on a clear topic switch.
 
 2) Coverage:
 - Chunks are contiguous, ordered, no gaps.
@@ -513,18 +507,19 @@ Do NOT split on fillers: 好/那/所以/然后/再来/继续/我们先看一下/
 
 
 3) Start Anchors:
-- MUST be an exact contiguous substring copied from the transcript.
-- Length MUST be 30 to 40 Chinese characters ONLY.
-- Preserve transcript characters exactly (including punctuation/spaces if they are inside the chosen span).
+- Look at the chunk’s text.
+- Take the first 40 characters.
+- If the chunk is shorter than 40, take as many as you can but at least 30 if possible.
+- The start_anchor must be an exact, contiguous substring (no edits, no skipping characters).
 
 4) topic_label_raw:
-<=15 Chinese characters, noun-phrase style, short.
+- <=15 Chinese characters, noun-phrase style, short.
 
 5) summary:
-1–2 sentences, no new facts.
+- 1–2 sentences, no new facts.
 
 6) key lists:
-Up to 8 items each; only explicit mentions.
+- Up to 8 items each; only explicit mentions.
 """.strip()
 
 END_ANCHOR_ONLY_INSTRUCTIONS = r"""

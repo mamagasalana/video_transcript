@@ -97,18 +97,25 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
         
         for chunk in tmp['topic_chunks']:
             start_anchor = chunk['start_anchor']
-            raw_i, norm_i, votes, total_votes, debug_extra = nf.find_by_chunk(to_simplified.convert(start_anchor), norm_i, 5)
+            prev_norm_i = norm_i
+            norm_i, raw_i, votes, total_votes, debug_extra = nf.find_by_chunk(to_simplified.convert(start_anchor), norm_i, 5)
             chunk['votes'] =  votes
             chunk['total_votes'] =  total_votes
             chunk['start_idx'] = raw_i
+            chunk['norm_idx'] = norm_i
 
             if raw_i == -1:
+                with open("transcript_raw.txt", "w", encoding="utf-8") as f:
+                    f.write(transcript_raw)
                 with open("transcript.txt", "w", encoding="utf-8") as f:
                     f.write(transcript)
                 with open("think.txt", "w", encoding="utf-8") as f:
                     f.write(out['think'])
-                with open('debug.json', 'w') as ofile:
+                with open('debug.json', 'w' , encoding="utf-8") as ofile:
                     json.dump(tmp, ofile)
+
+                with open('all_out.json', 'w', encoding="utf-8") as ofile:
+                    json.dump(all_out, ofile)
                 print('debug')
                 assert raw_i != -1, start_anchor
         
@@ -117,6 +124,7 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
         if i+CHUNK_SIZE >= len(transcript):
             break
         i = raw_i
+        norm_i = prev_norm_i # back to previous, because we start next transcript from the previous start
 
     return all_out
 
