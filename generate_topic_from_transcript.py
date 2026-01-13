@@ -175,8 +175,12 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
             js = ret['js']
             if final_ret:
                 final_ret.pop() # remove last one if exist
+                        
             for j in js['topic_chunks']:
+                if final_ret and (j['start_idx'] == final_ret[-1]['start_idx']):
+                    continue
                 final_ret.append(j)
+                
         
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(final_ret, f, ensure_ascii=False, indent=2)
