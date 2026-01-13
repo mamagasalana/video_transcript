@@ -6,7 +6,15 @@ from collections import Counter
 class NormFinder:
     def __init__(self, raw: str):
         self.raw = raw
-        self.norm, self.norm2raw = self._normalize_with_map(raw)
+        self.norm, self.norm2raw_list = self._normalize_with_map(raw)
+        self.norm2raw = {idx: v for idx, v in enumerate(self.norm2raw_list)}
+
+        raw2norm = {v:k for k,v in self.norm2raw.items()} # this has gap
+        self.raw2norm = {}
+        prev = raw2norm[min(raw2norm)]   # fill missing gap with previous value
+        for i in range(min(raw2norm), max(raw2norm) + 1):
+            prev = raw2norm.get(i, prev)
+            self.raw2norm[i] = prev
 
     def _normalize_with_map(self, s: str) -> Tuple[str, List[int]]:
         norm_chars: List[str] = []

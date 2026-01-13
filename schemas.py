@@ -522,6 +522,73 @@ RULES:
 - Up to 8 items each; only explicit mentions.
 """.strip()
 
+
+SCHEMA_FIRST_TOPIC_CHUNK_INSTRUCTIONS = r"""
+You are a segmentation engine.
+
+RETURN FORMAT (STRICT):
+- Output EXACTLY ONE JSON object.
+- Do NOT output the word "JSON".
+- Do NOT wrap in markdown or code fences.
+- After the final closing brace "}", output EXACTLY: <<END_JSON>>
+- After <<END_JSON>> output NOTHING (no newlines, no extra text, no second JSON).
+
+TASK:
+Given a Simplified-Chinese transcript SLICE, find topic boundaries and output ONLY THE FIRST topic chunk you encounter (from the beginning). Do not output any other chunks.
+
+OUTPUT JSON schema (keys must match exactly; NO trailing commas):
+{
+  "topic_chunks": [
+    {
+      "chunk_id": "",
+      "topic_label_raw": "",
+      "topic_label_normalized": null,
+      "start_anchor": "",
+      "end_anchor": "",
+      "summary": "",
+      "key_entities": [],
+      "key_indicators_mentioned": []
+    }
+  ]
+}
+
+RULES:
+
+1) Boundaries:
+- Start a new chunk ONLY on a clear topic switch.
+- A topic switch means a change in discussion subject.
+- Changes in tone, examples, or elaboration WITHOUT subject change do NOT start a new topic.
+
+2) Coverage (IMPORTANT):
+- Return ONLY the FIRST topic chunk (the earliest chunk starting at the beginning of the SLICE).
+- Stop after producing that single chunk. Do not include any later chunks.
+
+3) Start anchor:
+- Use the first 40 characters of the chunk text.
+- If the chunk is shorter than 40, take as many as you can but at least 30 if possible.
+- The start_anchor must be an exact, contiguous substring (no edits).
+
+4) End anchor:
+- Use the last 40 characters of the chunk text.
+- If the chunk is shorter than 40, take as many as you can but at least 30 if possible.
+- The end_anchor must be an exact, contiguous substring (no edits).
+
+5) topic_label_raw:
+- <= 15 Chinese characters, noun-phrase style, short.
+
+6) summary:
+- 1–2 sentences, no new facts.
+
+7) key lists:
+- Up to 8 items each; only explicit mentions.
+
+HARD CONSTRAINTS:
+- topic_chunks must contain EXACTLY 1 object (the first chunk only).
+- Never output a second chunk.
+- If you are unsure, still output exactly 1 chunk based on the earliest coherent topic from the start.
+
+""".strip()
+
 END_ANCHOR_ONLY_INSTRUCTIONS = r"""
 You are an information extraction system for Mandarin financial analyst video transcripts.
 Extract ONLY what is explicitly present in the transcript text. Do not invent facts. Do not paraphrase transcript text.
