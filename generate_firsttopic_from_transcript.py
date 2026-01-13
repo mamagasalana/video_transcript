@@ -30,6 +30,7 @@ CHUNK_SIZE = 6000
 SEED = 1234
 STOP = ["<<END_JSON>>"]
 STOP = []
+DEBUG = False
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
@@ -85,14 +86,11 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
 
     i = 0
     norm_i = 0
-    attempt= 1
-    debug_attempt = {}
     all_out= []
 
-    while attempt:
+    while i+100 < len(transcript):
         prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript[i:i+CHUNK_SIZE].strip()}\n>>>\n"
         out = extract(prompt)
-        debug_attempt[attempt] = i
         tmp = out['js']
         
         for chunk in tmp['topic_chunks']:
@@ -140,10 +138,7 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
                 print('debug')
                 assert raw_i != -1, end_anchor
         
-        attempt+=1
         all_out.append(out)
-        if i+CHUNK_SIZE >= len(transcript):
-            break
         i = chunk['end_idx'] # allow overlap from last anchor end_idx
         norm_i = nf.raw2norm[i] 
 
@@ -190,9 +185,17 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
 
     try:
         all_ret  = run_extract(llm , SCHEMA_FIRST_TOPIC_CHUNK_INSTRUCTIONS, transcript2, seed=SEED)                
-        
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(all_ret, f, ensure_ascii=False, indent=2)
+        all_ret2 = []
+        for ret in all_ret:
+            for js in ret['js']['topic_chunks']:
+                all_ret2.append(js)
+
+        if DEBUG:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(all_ret, f, ensure_ascii=False, indent=2)
+        else:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(all_ret2, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
         print(f"  [{dt}] ERR: {e}")
