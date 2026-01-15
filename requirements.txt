@@ -1,2 +1,4 @@
 openai-whisper
 faster-whisper
+openai
+tiktoken

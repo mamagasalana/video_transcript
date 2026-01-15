@@ -72,7 +72,7 @@ def extract(prompt):
         out['think'] = think
     except:
         with open("test.txt", "w", encoding="utf-8") as f:
-            f.write(out["choices"][0]["text"])
+            f.write(tmp)
         with open("test.txt", "a", encoding="utf-8") as f:
             f.write('\n')
             f.write(json.dumps(out.get("usage", {})))

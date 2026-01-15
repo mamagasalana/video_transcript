@@ -532,6 +532,7 @@ RETURN FORMAT (STRICT):
 - Do NOT wrap in markdown or code fences.
 - After the final closing brace "}", output EXACTLY: <<END_JSON>>
 - After <<END_JSON>> output NOTHING (no newlines, no extra text, no second JSON).
+- Ending (must match): }<<END_JSON>>
 
 TASK:
 Given a Simplified-Chinese transcript SLICE, find topic boundaries and output ONLY THE FIRST topic chunk you encounter (from the beginning). Do not output any other chunks.
@@ -620,3 +621,13 @@ FAILSAFE:
 - If transcript is empty OR cutoff is unclear, output exactly:
 文本不足|||文本不足|||文本不足<<IWANTTOREST>>
 """.strip()
+
+
+SCHEMA_DEVELOPER_OPENAI = r"""You are an information extraction system for Mandarin financial video transcripts.
+Split the transcript into coherent TOPIC CHUNKS.
+Prefer FEWER, LARGER chunks.
+Create a new chunk ONLY when the main topic changes in a sustained way.
+Do NOT split due to examples, repetition, or elaboration of the same idea.
+start_anchor MUST be an exact substring from the transcript and 30 to 40 Chinese characters.
+Extract only what is explicitly stated. Do not invent facts.
+"""

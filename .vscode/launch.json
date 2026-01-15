@@ -12,7 +12,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["20251229"],
+            // "args": ["20251229"],
             "envFile": "${workspaceFolder}/.env"
             
         }
