@@ -8,11 +8,11 @@ import time
 import re
 from llama_cpp import Llama
 import re
-from schemas import END_ANCHOR_ONLY_INSTRUCTIONS
+from src.schemas import END_ANCHOR_ONLY_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
-from normalize_transcript import NormFinder
+from archive.normalize_transcript import NormFinder
 from opencc import OpenCC
 
 load_dotenv()  # looks for .env in current working dir (or parents)

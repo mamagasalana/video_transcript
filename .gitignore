@@ -5,3 +5,4 @@ result/*.json
 __pycache__/*
 *.json
 *.txt
+src/__pycache__/*

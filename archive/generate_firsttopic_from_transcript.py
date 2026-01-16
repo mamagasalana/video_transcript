@@ -8,11 +8,11 @@ import time
 import re
 from llama_cpp import Llama
 import re
-from schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
+from src.schemas import SCHEMA_FIRST_TOPIC_CHUNK_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
-from normalize_transcript import NormFinder
+from archive.normalize_transcript import NormFinder
 from opencc import OpenCC
 
 load_dotenv()  # looks for .env in current working dir (or parents)
@@ -30,6 +30,7 @@ CHUNK_SIZE = 6000
 SEED = 1234
 STOP = ["<<END_JSON>>"]
 STOP = []
+DEBUG = False
 
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
@@ -71,7 +72,7 @@ def extract(prompt):
         out['think'] = think
     except:
         with open("test.txt", "w", encoding="utf-8") as f:
-            f.write(out["choices"][0]["text"])
+            f.write(tmp)
         with open("test.txt", "a", encoding="utf-8") as f:
             f.write('\n')
             f.write(json.dumps(out.get("usage", {})))
@@ -85,46 +86,61 @@ def run_extract(llm: Llama, SCHEMA_INSTRUCTIONS,  transcript_raw: str, seed=1234
 
     i = 0
     norm_i = 0
-    attempt= 1
-    debug_attempt = {}
     all_out= []
 
-    while attempt:
+    while i+100 < len(transcript):
         prompt = f"{SCHEMA_INSTRUCTIONS}\n\nTranscript:\n<<<\n{transcript[i:i+CHUNK_SIZE].strip()}\n>>>\n"
         out = extract(prompt)
-        debug_attempt[attempt] = i
         tmp = out['js']
         
         for chunk in tmp['topic_chunks']:
             start_anchor = chunk['start_anchor']
-            prev_norm_i = norm_i
             norm_i, raw_i, votes, total_votes, debug_extra = nf.find_by_chunk(to_simplified.convert(start_anchor), norm_i, 5)
-            chunk['votes'] =  votes
-            chunk['total_votes'] =  total_votes
+            chunk['start_votes'] =  votes
+            chunk['start_total_votes'] =  total_votes
             chunk['start_idx'] = raw_i
-            chunk['norm_idx'] = norm_i
+            chunk['start_norm_idx'] = norm_i
 
-            if raw_i == -1:
+            if norm_i == -1:
                 with open("transcript_raw.txt", "w", encoding="utf-8") as f:
                     f.write(transcript_raw)
                 with open("transcript.txt", "w", encoding="utf-8") as f:
                     f.write(transcript)
                 with open("think.txt", "w", encoding="utf-8") as f:
                     f.write(out['think'])
-                with open('debug.json', 'w' , encoding="utf-8") as ofile:
+                with open('debug.json', 'w' , ) as ofile:
                     json.dump(tmp, ofile)
 
                 with open('all_out.json', 'w', encoding="utf-8") as ofile:
                     json.dump(all_out, ofile)
                 print('debug')
                 assert raw_i != -1, start_anchor
+
+            end_anchor = chunk['end_anchor']
+            norm_i, raw_i, votes, total_votes, debug_extra = nf.find_by_chunk(to_simplified.convert(end_anchor), norm_i, 5)
+            chunk['end_votes'] =  votes
+            chunk['end_total_votes'] =  total_votes
+            chunk['end_idx'] = raw_i
+            chunk['end_norm_idx'] = norm_i
+
+            if norm_i == -1:
+                with open("transcript_raw.txt", "w", encoding="utf-8") as f:
+                    f.write(transcript_raw)
+                with open("transcript.txt", "w", encoding="utf-8") as f:
+                    f.write(transcript)
+                with open("think.txt", "w", encoding="utf-8") as f:
+                    f.write(out['think'])
+                with open('debug.json', 'w' , ) as ofile:
+                    json.dump(tmp, ofile)
+
+                with open('all_out.json', 'w', encoding="utf-8") as ofile:
+                    json.dump(all_out, ofile)
+                print('debug')
+                assert raw_i != -1, end_anchor
         
-        attempt+=1
         all_out.append(out)
-        if i+CHUNK_SIZE >= len(transcript):
-            break
-        i = raw_i
-        norm_i = prev_norm_i # back to previous, because we start next transcript from the previous start
+        i = chunk['end_idx'] # allow overlap from last anchor end_idx
+        norm_i = nf.raw2norm[i] 
 
     return all_out
 
@@ -168,22 +184,18 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
     transcript2 = normalize_zh_transcript(transcript)
 
     try:
-        all_ret  = run_extract(llm , SCHEMA_TOPIC_CHUNK_INSTRUCTIONS, transcript2, seed=SEED)
-
-        final_ret = []
+        all_ret  = run_extract(llm , SCHEMA_FIRST_TOPIC_CHUNK_INSTRUCTIONS, transcript2, seed=SEED)                
+        all_ret2 = []
         for ret in all_ret:
-            js = ret['js']
-            if final_ret:
-                final_ret.pop() # remove last one if exist
-                        
-            for j in js['topic_chunks']:
-                if final_ret and (j['start_idx'] == final_ret[-1]['start_idx']):
-                    continue
-                final_ret.append(j)
-                
-        
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(final_ret, f, ensure_ascii=False, indent=2)
+            for js in ret['js']['topic_chunks']:
+                all_ret2.append(js)
+
+        if DEBUG:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(all_ret, f, ensure_ascii=False, indent=2)
+        else:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(all_ret2, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
         print(f"  [{dt}] ERR: {e}")
