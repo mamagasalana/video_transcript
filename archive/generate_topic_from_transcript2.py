@@ -12,7 +12,7 @@ from src.schemas import END_ANCHOR_ONLY_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
-from archive.normalize_transcript import NormFinder
+from src.normalize_transcript import NormFinder
 from opencc import OpenCC
 
 load_dotenv()  # looks for .env in current working dir (or parents)
