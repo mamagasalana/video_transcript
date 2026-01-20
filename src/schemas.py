@@ -631,3 +631,89 @@ Do NOT split due to examples, repetition, or elaboration of the same idea.
 start_anchor MUST be an exact substring from the transcript and 30 to 40 Chinese characters.
 Extract only what is explicitly stated. Do not invent facts.
 """
+
+SCHEMA_SIGNAL_RULES = r"""
+You are extracting TRADING SIGNALS (forward-looking bets) from a Mandarin Chinese financial-program transcript.
+
+LANGUAGE CONTEXT:
+- The transcript is in Mandarin Chinese.
+- Trading signals may be expressed implicitly using Mandarin financial terminology.
+- Pay attention to future-oriented / modal phrases such as:
+  "我认为", "我预计", "我判断", "可能", "大概率", "倾向于", "不排除", "会", "将会", "会继续", "应该".
+
+PRIMARY GOAL:
+- Extract forward-looking outlooks that imply a tradable direction (signals).
+- Avoid mistaking OBSERVATIONS (what already happened / is happening) as signals.
+
+CORE DISTINCTION (MOST IMPORTANT):
+1) OBSERVATION (NOT a signal)
+- Past/present facts, recaps, indicator readings, headlines, explanations.
+- Examples (NOT signals):
+  - "VIX 今天大涨/飙升。"
+  - "标普昨天跌了 2%。"
+  - "黄金本周上涨。"
+  - "美元现在很强。"
+
+2) TRADING SIGNAL (IS a signal)
+- Any forward-looking expectation/belief about what will happen next that implies a tradable direction,
+  even if no explicit buy/sell verb is used.
+- Signals can be weak; use the confidence field to reflect strength.
+
+SIGNAL FORMS (either one qualifies):
+A) Explicit trade action language
+- Open/enter/add: 买, 做多, 进场, 布局, 加仓
+- Close/exit/reduce: 平仓, 出场, 止盈, 止损, 减仓, 出清, 回补
+
+B) Future expectation (no explicit trade verb required)
+- If the speaker expresses a belief/expectation about future movement, treat it as a signal.
+- Examples (signals, weak→strong):
+  - "我认为波动率还会继续上升。"                → signal (weak)
+  - "波动率大概率还会往上走。"                  → signal
+  - "波动率会继续飙升。"                        → signal
+  - "我预期还会再飙，所以要去做多波动率。"       → signal (strong)
+- Non-signal (observation only):
+  - "波动率今天上升。"
+  - "VIX 今天飙升。"
+  - "现在市场很波动。"
+
+CRITICAL FILTER RULE:
+- Do NOT output items that are only OBSERVATIONS (past/present facts) with no future expectation.
+- If observation + outlook appear together, extract the outlook as the signal.
+- If observation + explicit action appear together, extract the action as the signal.
+
+INSTRUMENT RULES:
+- Only extract instruments explicitly mentioned in the transcript.
+- Use the transcript’s exact wording for instrument.name_raw (no guessing tickers/symbols).
+- If the transcript is vague ("美股", "大盘", "市场"), keep that exact wording.
+
+INTENT RULES (must map precisely):
+- intent MUST be one of: "open_buy", "open_sell", "close_buy", "close_sell"
+- Mapping guidance:
+  - open_buy: expects/advocates upside (买/做多/布局多头)
+  - open_sell: expects/advocates downside (做空/放空)
+  - close_sell: exit/reduce a long (平多/卖出出清多头)
+  - close_buy: exit/reduce a short (回补/平空)
+- If the transcript only expresses a future expectation without explicit entry/exit wording,
+  choose open_buy/open_sell based on direction.
+
+EVIDENCE RULE (VERY IMPORTANT):
+- Every evidence sentence MUST be copied EXACTLY from the transcript as a contiguous substring.
+- Do NOT paraphrase evidence.
+- The same evidence sentence may support multiple signals.
+- Prefer the shortest complete sentence/line that contains the forward-looking expectation or action.
+
+DE-DUPING RULE:
+- If multiple statements imply the same signal (same instrument + same intent), output ONE signal and attach
+  multiple evidence references.
+
+CONFIDENCE RULE:
+- Use only: 0.3, 0.5, 0.7, 1.0
+  - 1.0: explicit instrument + explicit trade instruction (very clear)
+  - 0.7: clear forward-looking call; strong language ("一定/肯定/会继续/很明确")
+  - 0.5: moderate expectation; hedged language ("可能/大概率/倾向/预计")
+  - 0.3: weak/uncertain expectation ("或许/不排除/我猜/感觉")
+
+OUTPUT:
+- Produce output strictly following the provided template (text_format).
+- If there are no trading signals, output empty lists for signals/evidence as required by the template.
+"""
