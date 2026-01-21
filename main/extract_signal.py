@@ -11,5 +11,5 @@ from template.template import TradingSignal
 
 app = OPENAI_API(TradingSignal, OUTPUT_FOLDER, SCHEMA_SIGNAL_RULES)
 for _ in app.run_batch():
-    break
+    # break
     pass

@@ -13,7 +13,7 @@ class UsageTracker:
 
     @property
     def today(self) -> str:
-        return datetime.datetime.now().strftime("%Y%m%d")
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
 
     def _empty_day(self) -> dict:
         return {"spent": 0, "cap": self.cap, "updated_at": None}
@@ -52,7 +52,7 @@ class UsageTracker:
             all_data[day_key] = self._empty_day()
 
         all_data[day_key]["spent"] += int(usage)
-        all_data[day_key]["updated_at"] =  datetime.datetime.now().isoformat(timespec="seconds")
+        all_data[day_key]["updated_at"] =  datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
