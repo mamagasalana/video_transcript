@@ -32,9 +32,10 @@ class AssetClass(str, Enum):
 
 class Intent(str, Enum):
     OPEN_BUY = "open_buy"     # initiate/open/add exposure
-    OPEN_SELL = "open_sell"   # close/reduce/exit exposure
-    CLOSE_BUY = "close_buy"     # initiate/open/add exposure
+    OPEN_SELL = "open_sell"   # initiate/open/add exposure
+    CLOSE_BUY = "close_buy"     # close/reduce/exit exposure
     CLOSE_SELL = "close_sell"   # close/reduce/exit exposure
+    NO_ACTION = "no_action"
 
 class InstrumentRef(BaseModel):
     asset_class: AssetClass
