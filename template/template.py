@@ -54,9 +54,17 @@ class TradingSignalBase(BaseModel):
     confidence:  Confidence = 0.7
     evidence_ids: List[int] = Field(default_factory=list)
 
+class EvidenceType(str, Enum):
+    ANCHOR = "anchor"   # explicitly names the instrument
+    DRIVER = "driver"   # explains what moves price
+    STANCE = "stance"   # expresses implied/explicit trade stance
+    SYNTHESIS = "synthesis"  # model-generated reasoning glue
+    OTHER  = "other"    # glue/context
+
 class EvidenceSpan(BaseModel):
     evidence_id: int = Field(..., description="Unique evidence ID, e.g. 1")
     sentence: str = Field(..., description="Exact sentence/line from transcript.")
+    evidence_type: EvidenceType = Field(..., description="anchor/driver/stance/other")
 
 class TradingSignal(BaseModel):
     evidence: List[EvidenceSpan] = Field(default_factory=list)

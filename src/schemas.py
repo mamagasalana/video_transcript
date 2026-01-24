@@ -12,57 +12,89 @@ Extract only what is explicitly stated. Do not invent facts.
 SCHEMA_SIGNAL_RULES = r"""
 Extract TRADING SIGNALS (forward-looking bets) from a Mandarin Chinese financial transcript.
 
+You MUST follow the provided Pydantic structure:
+- evidence: list of EvidenceSpan {evidence_id, sentence, evidence_type}
+- signals: list of TradingSignalBase {signal_id, instrument, intent, confidence, evidence_ids}
+
+EvidenceType enum:
+- anchor, driver, stance, synthesis, other
+
 OUTPUT:
 - Output must match the provided template exactly.
+- Output ONLY valid JSON (no markdown, no commentary).
 
 COVERAGE (IMPORTANT):
 - Do not only return the most prominent instrument.
 - Extract signals for ALL explicitly mentioned instruments that have any forward-looking bias or positioning implication supported by evidence.
-- If an instrument is mentioned but has no forward-looking bias and no positioning implication, set no action.
-- Ambigious/weak/implied signals are welcome with low confidence value.
-
-SIGNAL:
-- A signal (open_*/close_* intents) is a statement that implies either 
-(a) a trading action/positioning, OR 
-(b) a forward-looking directional bias
-- Observation OR recap = "no_action"
+- If an instrument is mentioned but has no forward-looking bias and no positioning implication, emit exactly one NO_ACTION signal for it.
+- Ambiguous/weak/implied signals are welcome with low confidence.
 
 INSTRUMENT:
-- Only extract instruments explicitly mentioned.
-- instrument.name_raw must be exact transcript wording.
-- symbol null unless explicitly stated.
-- asset_class best-effort; if unclear use "other".
+- Only extract instruments explicitly mentioned in the transcript.
+- instrument.name_raw MUST be exact transcript wording.
+- instrument.symbol MUST be null unless explicitly stated.
+- instrument.asset_class best-effort; if unclear use "other".
+- instrument.name_normalized is optional; set null if unsure.
 
-INTENT:
-- open_buy/open_sell: statements that express a bullish/bearish directional bias, or encourage initiating/adding exposure in that direction.
-- close_buy/close_sell: statements that imply reducing/exiting exposure for risk control or profit-taking (defensive / de-risk).
-- no_action: observation/recap only; NOT a tradable bias.
+INTENT (MEANING-BASED):
+- open_buy: stance implies bullish exposure or upside re-pricing.
+- open_sell: stance implies bearish exposure or downside re-pricing.
+- close_buy / close_sell: stance implies reducing/exiting exposure (de-risk / take profit / cut loss / step aside).
+- no_action: only describing/explaining/observing; no tradable stance.
 
-EVIDENCE (STRICT + LINKING, WITH IMPLICIT REFERENCE):
-- evidence.sentence MUST be copied EXACTLY as a contiguous substring (keep whitespace/line breaks).
-- A signal may reference multiple evidence snippets.
+EVIDENCE SPANS (STRICT FOR NON-SYNTHESIS):
+- evidence.sentence MUST be copied EXACTLY as a contiguous substring from the provided transcript (keep whitespace/line breaks),
+  EXCEPT when evidence_type="synthesis".
+- evidence_type meanings:
+  - anchor: explicitly contains instrument.name_raw EXACTLY (instrument mention).
+  - driver: explains what could move price (causal story, correlation, mechanism, macro transmission, supply/demand, inventory, timing, positioning dynamics).
+  - stance: a transcript sentence that conveys a bet/preference/positioning/de-risk decision (explicit or clearly expressed).
+  - synthesis: MODEL-GENERATED reasoning glue that summarizes the implied stance in ONE short sentence, grounded by cited evidence_ids.
+  - other: glue/context for linkage only.
 
-- Evidence snippets can be:
-  (A) explicit: contains instrument.name_raw exactly, OR
-  (B) implicit: does NOT contain instrument.name_raw, but is clearly part of the same local passage where the instrument is being discussed (coreference/ellipsis), with no topic switch to another instrument in-between.
+SYNTHESIS RULES (THIS REPLACES HARD COUNTING):
+- You MAY create evidence_type="synthesis" to state what you believe the host is implying.
+- synthesis.sentence is NOT required to be a verbatim transcript substring.
+- synthesis.sentence MUST:
+  (1) be ONE sentence, concise.
+  (2) be strictly grounded: it must NOT introduce new facts beyond what is supported by referenced evidence snippets.
+  (3) state a directional implication or de-risk implication if and only if the host implies it.
+- Any open_* / close_* signal that is NOT supported by an explicit stance sentence MUST include a synthesis evidence span.
 
-- To emit a signal, across referenced evidence snippets you must have:
-  (i) at least one snippet that anchors the instrument (explicit mention), AND
-  (ii) at least one snippet that provides the forward-looking bias or positioning implication (explicit or implicit).
-- If you cannot provide an explicit instrument anchor snippet, omit the signal.
+SIGNAL GATING (CRITICAL):
+For ANY open_* / close_* signal, evidence_ids MUST include:
+  (A) >=1 anchor evidence span for that instrument, AND
+  (B) either:
+      (B1) >=1 stance evidence span (verbatim transcript) that supports the intent,
+      OR
+      (B2) >=1 synthesis evidence span that states the implied stance.
 
-NO_ACTION HANDLING:
-- For intent = "no_action", only an explicit instrument anchor snippet (contains instrument.name_raw) is required.
-- Do NOT output "no_action" for an instrument that already has any open_*/close_* signal.
+For intent="no_action":
+- Only >=1 anchor evidence span is required (drivers optional).
+- Do NOT output no_action for an instrument that already has open_*/close_*.
+
+GROUNDING & LINKAGE (NO HALLUCINATION):
+- Every evidence span (anchor/driver/stance/other) must be usable as-is to locate the passage in the transcript.
+- For synthesis evidence, ensure it is grounded by the other evidence_ids referenced by the same signal:
+  - The signal’s evidence_ids list must include the synthesis id AND the supporting anchor/driver/stance ids it is based on.
+- Do NOT use synthesis to smuggle in assumptions not supported by transcript.
+
+ANTI-CHERRY-PICKING (QUALITY CONTROL):
+- Consider the local passage as a whole.
+- If the passage contains meaningful drivers pointing both directions and the host does not resolve them into a clear stance,
+  output no_action or lower confidence (<=0.3).
+- Do not over-commit from a single sensational line.
 
 INTEGRITY:
 - evidence_id and signal_id: unique increasing integers starting at 1.
-- Each signal must have >=1 evidence_id; all evidence_ids must exist; no unused evidence.
+- Each signal must have >=1 evidence_id.
+- All evidence_ids referenced by signals must exist in evidence list.
+- No unused evidence: every evidence item must be referenced by at least one signal.
 
-CONFIDENCE:
+CONFIDENCE (STANCE CLARITY):
 - confidence must be between 0.0 and 1.0.
-- Explicit action/positioning => >=0.7
-- Direction/bias only => <=0.5
-- Ambigious evidence => <=0.3
-- no_action => == 0.0
+- no_action => exactly 0.0
+- Explicit stance sentence clearly supports intent => >= 0.7
+- Implied stance supported mainly via synthesis (grounded) => typically 0.3–0.7 (use 0.5 when fairly clear)
+- Mixed/uncertain implication => <= 0.3
 """
