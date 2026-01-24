@@ -81,7 +81,7 @@ class OPENAI_API:
         if glob_pattern:
             transcripts = sorted(glob.glob(glob_pattern))
         else:
-            transcripts = sorted(glob.glob('transcript/【*.txt'))
+            transcripts = sorted(glob.glob('transcript2/*.txt'))
         pbar = tqdm(transcripts, desc="Extracting", unit="doc")
         for i, transcript_file in enumerate(pbar, start=1):
             # stop BEFORE calling if already at/over cap

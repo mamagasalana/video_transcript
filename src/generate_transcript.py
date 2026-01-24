@@ -7,6 +7,11 @@ import re
 import os
 import time
 import torch
+from opencc import OpenCC
+from tqdm import tqdm
+
+to_simplified = OpenCC("t2s") 
+
 if not torch.cuda.is_available():
     raise RuntimeError("No CUDA device available – cannot run on GPU.")
 
@@ -35,6 +40,7 @@ model = WhisperModel(
 )
 
 os.makedirs('transcript' , exist_ok=True)
+os.makedirs('transcript2' , exist_ok=True)
 
 for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
 
@@ -50,17 +56,10 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
     file_start = time.perf_counter()   # tic for this file
     print("Transcribing %s ... this may take a while." % dt)
     
-    prompt_zh = (
-        "这是普通话财经节目。请使用标准财经用语并准确转写机构与公司名称。"
-        "常见机构/公司：摩根大通、高盛、摩根士丹利、花旗、瑞银、瑞信、德意志银行、"
-        "贝莱德、桥水、富达、景顺；常见词：美联储、加息、降息、收益率、国债、基点、"
-        "通胀、CPI、GDP、EPS、PE、标普500、纳斯达克、道琼斯。"
-    )
     segments, info = model.transcribe(
         video_path,
         beam_size=5,
         vad_filter=False,   # turn off VAD
-        initial_prompt=prompt_zh,
         language="zh",
     )
 
@@ -73,3 +72,66 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
             
     file_end = time.perf_counter()     # toc for this file
     print(f"  Finished {video_path} in {file_end - file_start:.2f} seconds.\n")
+
+
+def normalize_zh_transcript(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
+
+    lines = [ln.strip() for ln in text.split("\n")]
+    out = []
+    for ln in lines:
+        if not ln:
+            out.append("")  
+            continue
+        if not out or out[-1] == "":
+            out.append(ln)
+            continue
+
+        
+        if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
+            out[-1] = out[-1] + " " + ln
+        else:
+            out.append(ln)
+
+    text2 = "\n".join(out)
+    # text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
+    text2 = re.sub(r'\s+', ' ', text2).strip()
+    return to_simplified.convert(text2)
+
+def wrap_by_whitespace(text: str, max_len: int = 30) -> str:
+    # Split by any whitespace and drop empties
+    tokens = re.findall(r"\S+", text)
+
+    lines = []
+    current = ""
+
+    for tok in tokens:
+        if not current:
+            current = tok
+        else:
+            candidate = current + " " + tok
+            if len(candidate) <= max_len:
+                current = candidate
+            else:
+                lines.append(current)
+                current = tok
+
+    if current:
+        lines.append(current)
+
+    return "\n".join(lines)
+
+
+# clean to make it readable
+for transcript_path in  tqdm(sorted(glob.glob('transcript/*'))):
+    with open(transcript_path, 'r') as ifile:
+        transcript_raw =ifile.read()
+
+    transcript_path2 = re.findall(r'\d+', transcript_path)[0]
+
+    transcript_clean = normalize_zh_transcript(transcript_raw)
+    transcript_clean2 = wrap_by_whitespace(transcript_clean, 60)
+    
+    with open(os.path.join('transcript2', '%s.txt' % transcript_path2), 'w') as ofile:
+        transcript_raw =ofile.write(transcript_clean2)

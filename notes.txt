@@ -21,5 +21,6 @@ hf download \
 
 # update new video file
 cp --update=none ~/ysg_backup/*.mp4 /home/ytee/test/ysg_backup/
+cp --update=none  /home/ytee/test/ysg_backup/* /home/ytee3/ysg_backup/
 
 rm result/*.json
