@@ -90,7 +90,7 @@ class OPENAI_API:
                 pbar.set_postfix({"spent": spent, "cap": TOKEN_CAP, "status": "cap reached"})
                 break
             
-            dt = re.findall(r'\d+', transcript_file)[0]
+            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
             debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
             if os.path.exists(out_path):
