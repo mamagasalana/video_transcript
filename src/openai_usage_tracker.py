@@ -7,13 +7,15 @@ TOKEN_CAP = 2_000_000
 SPENT_PATH = "spent.json"
 
 class UsageTracker:
-    def __init__(self, path: str = SPENT_PATH, cap: int = TOKEN_CAP):
+    def __init__(self, path: str = SPENT_PATH, cap: int = TOKEN_CAP, model: str = "openai"):
         self.path = path
         self.cap = cap
+        self.model = model
 
     @property
     def today(self) -> str:
-        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d")
+        return '%s_%s' % (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d"),
+                          self.model)
 
     def _empty_day(self) -> dict:
         return {"spent": 0, "cap": self.cap, "updated_at": None}

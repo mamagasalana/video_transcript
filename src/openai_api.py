@@ -8,7 +8,13 @@ from tqdm import tqdm
 import glob
 import re
 import os
+import json
 from opencc import OpenCC
+from dotenv import load_dotenv
+from typing_extensions import override
+
+load_dotenv() 
+
 
 to_simplified = OpenCC("t2s") 
 
@@ -22,6 +28,7 @@ class OPENAI_API:
             schema: Prompt/schema instructions passed to the model.
         """
         self.schema = schema
+        self.model = "openai"
         self.template = pydantic_template
         self.OUTPUT_FOLDER= output_folder
         self.DEBUG_PATH = 'debug_summary/'
@@ -62,7 +69,7 @@ class OPENAI_API:
             {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>"}]}
             ],
         text_format=self.template,
-        text={"verbosity":"medium"},
+        text={"verbosity":"low"},
         reasoning={"effort": "high", "summary":"detailed"},
         tools=[],
         store=True,
@@ -73,9 +80,16 @@ class OPENAI_API:
         
         return resp
 
+    def extract_output(self, resp):        
+        js = resp.output_parsed.model_dump_json(indent=2)
+        summary = ""
+        if resp.output and isinstance(resp.output[0],ResponseReasoningItem ):
+            summary = [ln.text.replace('. ', '.\n') for ln in resp.output[0].summary]
+        used = resp.usage.total_tokens
+        return js, summary, used
 
-    def run_batch(self, glob_pattern=None):
-        ustrack = UsageTracker()
+    def run_batch(self, glob_pattern=None, token_cap=TOKEN_CAP, force=False):
+        ustrack = UsageTracker(model=self.model, cap=token_cap)
         spent = ustrack.get()['spent']
 
         if glob_pattern:
@@ -86,14 +100,14 @@ class OPENAI_API:
         for i, transcript_file in enumerate(pbar, start=1):
             # stop BEFORE calling if already at/over cap
             
-            if spent >= TOKEN_CAP:
-                pbar.set_postfix({"spent": spent, "cap": TOKEN_CAP, "status": "cap reached"})
+            if spent >= token_cap:
+                pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
                 break
             
             dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
             debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
-            if os.path.exists(out_path):
+            if not force and os.path.exists(out_path):
                 continue
 
             with open(transcript_file, 'r') as ifile:
@@ -101,26 +115,24 @@ class OPENAI_API:
 
             transcript2 = self.normalize_zh_transcript(transcript)
             resp = self.get_json(transcript2)
+            js, summary, used = self.extract_output(resp)
 
             with open(out_path, "w", encoding="utf-8") as ofile:
-                ofile.write(resp.output_parsed.model_dump_json(indent=2))
+                ofile.write(js)
                 
-            if resp.output and isinstance(resp.output[0],ResponseReasoningItem ):
-                summary = [ln.text.replace('. ', '.\n') for ln in resp.output[0].summary]
-                with open(debug_path, 'w') as ofile:   
-                    ofile.writelines(summary)
+            with open(debug_path, 'w') as ofile:   
+                ofile.writelines(summary)
 
-            used = resp.usage.total_tokens
             spent = ustrack.set(used)
 
             pbar.set_postfix({
                 "used": used,
                 "spent": spent,
-                "remain": max(TOKEN_CAP - spent, 0),
+                "remain": max(token_cap - spent, 0),
             })
 
             # stop AFTER call if this call pushed you over
-            if spent >= TOKEN_CAP:
+            if spent >= token_cap:
                 break
             
             yield resp  # or yield resp.output_parsed, etc.
@@ -138,4 +150,42 @@ if __name__ == "__main__":
     app = OPENAI_API( TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
     for _ in app.run_batch():
         break
+    
+class OPENAI_API_DEEPSEEK(OPENAI_API):
+    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str):
+        super().__init__(
+            pydantic_template=pydantic_template,
+            output_folder=output_folder,
+            schema=schema,
+        )
+        self.model = "deepseek"
+        self.client = OpenAI(api_key=os.getenv('DEEPSEEK_API_KEY'), base_url='https://api.deepseek.com')
+        self._JSON_FENCE_RE = re.compile(
+            r"```(?:json)?\s*([\s\S]*?)\s*```",
+            re.IGNORECASE
+        )
+                
+    @override
+    def get_json(self, transcript):
+        resp = self.client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {"role": "system", "content": self.schema},
+                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>"},
+            ],
+            # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
+        )
+        return resp
+
+
+    @override
+    def extract_output(self, resp):
+        text = resp.choices[0].message.content
+        m = self._JSON_FENCE_RE.search(text)
+        js = json.loads(m.group(1).strip())
+        js2 = json.dumps(js, indent=2, ensure_ascii=False)
+
+        summary = resp.choices[0].message.reasoning_content
+        used = resp.usage.total_tokens
+        return js2, summary, used
     

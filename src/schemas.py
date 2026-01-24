@@ -98,3 +98,17 @@ CONFIDENCE (STANCE CLARITY):
 - Implied stance supported mainly via synthesis (grounded) => typically 0.3–0.7 (use 0.5 when fairly clear)
 - Mixed/uncertain implication => <= 0.3
 """
+
+SCHEMA_SIGNAL_RULES2 = r"""
+You are an experienced financial report analyst
+Extract TRADING SIGNALS from a Mandarin Chinese financial transcript
+Look for ALL instrument_type ("stock", "fx", "commodity", "crypto", "index", "rate", "etf", "bond", "other") mentioned in the transcript
+
+You MUST follow the provided Pydantic structure:
+- evidence: list of EvidenceSpan {evidence_id, sentence, evidence_type}
+- signals: list of TradingSignalBase {signal_id, instrument, intent, confidence, evidence_ids}
+
+
+CONFIDENCE:
+- confidence must be between 0.0 and 1.0.
+"""

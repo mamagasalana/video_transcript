@@ -69,3 +69,20 @@ class EvidenceSpan(BaseModel):
 class TradingSignal(BaseModel):
     evidence: List[EvidenceSpan] = Field(default_factory=list)
     signals: List[TradingSignalBase] = Field(default_factory=list)
+
+class EvidenceSpan_deepseek(BaseModel):
+    evidence_id: int = Field(..., ge=1)
+    sentence: str = Field(..., min_length=1)
+    evidence_type: str = Field(..., min_length=1)  # <-- now free-form
+
+class TradingSignalBase_deepseek(BaseModel):
+    signal_id: int = Field(..., ge=1)
+    instrument: str = Field(..., min_length=1)
+    intent: str = Field(..., min_length=1)         # free-form too (if you want)
+    confidence:  Confidence = 0.7
+    evidence_ids: List[int] = Field(default_factory=list)
+    instrument_type: str = Field(..., min_length=1)
+
+class TradingSignal_deepseek(BaseModel):
+    evidence: List[EvidenceSpan_deepseek] = Field(default_factory=list)
+    signals: List[TradingSignalBase_deepseek] = Field(default_factory=list)
