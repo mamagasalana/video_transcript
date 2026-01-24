@@ -106,8 +106,14 @@ Look for ALL instrument_type ("stock", "fx", "commodity", "crypto", "index", "ra
 
 You MUST follow the provided Pydantic structure:
 - evidence: list of EvidenceSpan {evidence_id, sentence, evidence_type}
-- signals: list of TradingSignalBase {signal_id, instrument, intent, confidence, evidence_ids}
+- signals: list of TradingSignalBase {signal_id, instrument, intent, confidence, evidence_ids, instrument_type}
 
+INTENT:
+  OPEN_BUY = "open_buy"    stance implies bullish exposure or upside re-pricing.
+  OPEN_SELL = "open_sell"  stance implies bearish exposure or downside re-pricing.
+  CLOSE_BUY = "close_buy"    stance implies reducing/exiting exposure (de-risk / take profit / cut loss / step aside).
+  CLOSE_SELL = "close_sell"  stance implies reducing/exiting exposure (de-risk / take profit / cut loss / step aside).
+  NO_ACTION = "no_action"
 
 CONFIDENCE:
 - confidence must be between 0.0 and 1.0.

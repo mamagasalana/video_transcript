@@ -114,8 +114,14 @@ class OPENAI_API:
                 transcript = ifile.read()
 
             transcript2 = self.normalize_zh_transcript(transcript)
+            
             resp = self.get_json(transcript2)
-            js, summary, used = self.extract_output(resp)
+
+            try:
+                js, summary, used = self.extract_output(resp)
+            except:
+                yield resp
+                raise
 
             with open(out_path, "w", encoding="utf-8") as ofile:
                 ofile.write(js)

@@ -78,7 +78,7 @@ class EvidenceSpan_deepseek(BaseModel):
 class TradingSignalBase_deepseek(BaseModel):
     signal_id: int = Field(..., ge=1)
     instrument: str = Field(..., min_length=1)
-    intent: str = Field(..., min_length=1)         # free-form too (if you want)
+    intent: Intent    # active vs passive
     confidence:  Confidence = 0.7
     evidence_ids: List[int] = Field(default_factory=list)
     instrument_type: str = Field(..., min_length=1)
