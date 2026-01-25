@@ -19,7 +19,10 @@ load_dotenv()
 to_simplified = OpenCC("t2s") 
 
 class OPENAI_API:
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str):
+    def __init__(self, pydantic_template: BaseModel, 
+                 output_folder:str, 
+                 schema: str, 
+                 debug_path:str='debug_summary/'):
         """Initialize the extractor.
 
         Args:
@@ -31,7 +34,7 @@ class OPENAI_API:
         self.model = "openai"
         self.template = pydantic_template
         self.OUTPUT_FOLDER= output_folder
-        self.DEBUG_PATH = 'debug_summary/'
+        self.DEBUG_PATH = debug_path
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
         os.makedirs(self.DEBUG_PATH, exist_ok=True)
         self.client = OpenAI()
@@ -164,6 +167,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
+            debug_path='debug_summary_deepseek',
         )
         self.model = "deepseek"
         self.client = OpenAI(api_key=os.getenv('DEEPSEEK_API_KEY'), base_url='https://api.deepseek.com')
