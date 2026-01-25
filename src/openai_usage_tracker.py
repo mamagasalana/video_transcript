@@ -2,15 +2,65 @@ import os
 import json
 import datetime
 import time
+import sqlite3
 
 TOKEN_CAP = 2_000_000
 SPENT_PATH = "spent.json"
+DB_PATH = "usage.db"
 
 class UsageTracker:
     def __init__(self, path: str = SPENT_PATH, cap: int = TOKEN_CAP, model: str = "openai"):
         self.path = path
         self.cap = cap
         self.model = model
+        self.init_db()
+
+    def get_conn(self):
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init_db(self):
+        with self.get_conn() as conn:
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS llm_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                reasoning_tokens INTEGER,
+                cached_tokens INTEGER,
+                total_tokens INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+
+    def update_db(self, u):
+        with self.get_conn() as conn:
+            conn.execute("""
+            INSERT INTO llm_usage (
+                provider, model, filename, 
+                prompt_tokens, completion_tokens,
+                reasoning_tokens, cached_tokens,
+                total_tokens
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                u["provider"],
+                u["model"],
+                u["filename"],
+                u["prompt_tokens"],
+                u["completion_tokens"],
+                u["reasoning_tokens"],
+                u["cached_tokens"],
+                u["total_tokens"],
+            ))
+
+    def extract_db(self, qry="SELECT * FROM llm_usage"):
+        with self.get_conn() as conn:
+            rows = conn.execute(qry).fetchall()
+        return [dict(r) for r in rows]
 
     @property
     def today(self) -> str:

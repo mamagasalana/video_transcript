@@ -78,6 +78,7 @@ class OPENAI_API:
         store=True,
         include=[
         ],
+        timeout= 300,
         # max_output_tokens=1000
         )
         
@@ -90,6 +91,19 @@ class OPENAI_API:
             summary = [ln.text.replace('. ', '.\n') for ln in resp.output[0].summary]
         used = resp.usage.total_tokens
         return js, summary, used
+
+    def normalize_usage(self, resp, filename):
+        usage = resp.usage.to_dict()
+        return {
+            "provider": self.model,
+            "model": resp.model,
+            "filename": filename,
+            "prompt_tokens": usage.get("input_tokens", 0),
+            "completion_tokens": usage.get("output_tokens", 0),
+            "reasoning_tokens": usage.get("output_tokens_details", {}).get("reasoning_tokens", 0),
+            "cached_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+        }
 
     def run_batch(self, glob_pattern=None, token_cap=TOKEN_CAP, force=False):
         ustrack = UsageTracker(model=self.model, cap=token_cap)
@@ -134,6 +148,13 @@ class OPENAI_API:
                 ofile.writelines(summary)
 
             spent = ustrack.set(used)
+
+            try:
+                ustrack.update_db(self.normalize_usage(resp, str(dt)))
+            except:
+                print('error parsing usage? %s' % dt)
+                yield resp
+                raise
 
             pbar.set_postfix({
                 "used": used,
@@ -196,6 +217,7 @@ OUTPUT MUST STRICTLY CONFORM TO THE FOLLOWING JSON SCHEMA:
                 {"role": "system", "content": self.schema},
                 {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>"},
             ],
+            timeout= 300,
             # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
         )
         return resp
@@ -217,3 +239,16 @@ OUTPUT MUST STRICTLY CONFORM TO THE FOLLOWING JSON SCHEMA:
         used = resp.usage.total_tokens
         return js2, summary, used
     
+    @override
+    def normalize_usage(self, resp, filename):
+        usage = resp.usage.to_dict()
+        return {
+            "provider": "deepseek",
+            "model": resp.model,
+            "filename": filename,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "reasoning_tokens": usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0),
+            "cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+        }
