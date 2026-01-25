@@ -100,21 +100,46 @@ CONFIDENCE (STANCE CLARITY):
 """
 
 SCHEMA_SIGNAL_RULES2 = r"""
-You are an experienced financial report analyst
-Extract TRADING SIGNALS from a Mandarin Chinese financial transcript
-Look for ALL instrument_type ("stock", "fx", "commodity", "crypto", "index", "rate", "etf", "bond", "other") mentioned in the transcript
+SCHEMA_VERSION=2026-01-25T10:56:00
+You are an experienced financial report analyst.
+Extract TRADING SIGNALS from a Mandarin Chinese financial transcript.
+Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other") mentioned in the transcript.
 
 You MUST follow the provided Pydantic structure:
 - evidence: list of EvidenceSpan {evidence_id, sentence, evidence_type}
-- signals: list of TradingSignalBase {signal_id, instrument, intent, confidence, evidence_ids, instrument_type}
+- signals: list of TradingSignalBase {signal_id, instrument, instrument_normalized, intent, confidence, evidence_ids, instrument_type}
 
-INTENT:
-  OPEN_BUY = "open_buy"    stance implies bullish exposure or upside re-pricing.
-  OPEN_SELL = "open_sell"  stance implies bearish exposure or downside re-pricing.
-  CLOSE_BUY = "close_buy"    stance implies reducing/exiting exposure (de-risk / take profit / cut loss / step aside).
-  CLOSE_SELL = "close_sell"  stance implies reducing/exiting exposure (de-risk / take profit / cut loss / step aside).
-  NO_ACTION = "no_action"
+EVIDENCE_ID:
+  Integer starting from 1.
+
+SENTENCE:
+  Free-form evidence text selected by the model that supports a signal.
+  May be a complete sentence or meaningful fragment from the transcript.
+  No fixed formatting rules.
+
+EVIDENCE_TYPE:
+  Free-form label selected by the model to describe the role of the evidence.
+  Any non-empty string is allowed.
+
+  
+SIGNAL_ID:
+  Integer starting from 1.
+
+INSTRUMENT:
+  Raw name from the transcript.
+
+INSTRUMENT_NORMALIZED:
+  Canonical, standardized instrument name derived from instrument (alias/translation normalization).
+  Use a stable identifier suitable for grouping and mapping to a tradable symbol; leave null if no reliable normalization.
 
 CONFIDENCE:
-- confidence must be between 0.0 and 1.0.
+  Must be between 0.0 and 1.0.
+
+INTENT:
+  OPEN_BUY = "open_buy"
+  OPEN_SELL = "open_sell"
+  CLOSE_BUY = "close_buy"
+  CLOSE_SELL = "close_sell"
+  NO_ACTION = "no_action"
+
 """

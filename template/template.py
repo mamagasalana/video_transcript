@@ -71,17 +71,21 @@ class TradingSignal(BaseModel):
     signals: List[TradingSignalBase] = Field(default_factory=list)
 
 class EvidenceSpan_deepseek(BaseModel):
-    evidence_id: int = Field(..., ge=1)
-    sentence: str = Field(..., min_length=1)
-    evidence_type: str = Field(..., min_length=1)  # <-- now free-form
+    evidence_id: int = Field(..., ge=1, description="Integer starting from 1")
+    sentence: str = Field(..., min_length=1, description="Evidence text span (can be fragment).")
+    evidence_type: str = Field(..., min_length=1, description="Free-form label/tag.")
 
 class TradingSignalBase_deepseek(BaseModel):
-    signal_id: int = Field(..., ge=1)
-    instrument: str = Field(..., min_length=1)
-    intent: Intent    # active vs passive
-    confidence:  Confidence = 0.7
-    evidence_ids: List[int] = Field(default_factory=list)
-    instrument_type: str = Field(..., min_length=1)
+    signal_id: int = Field(..., ge=1, description="Integer starting from 1")
+    instrument: str = Field(..., min_length=1, description="Raw instrument name from transcript")
+    instrument_normalized: Optional[str] = Field(
+        None,
+        description="Canonical standardized name; null if cannot normalize."
+    )
+    intent: Intent = Field(..., description="open_buy/open_sell/close_buy/close_sell/no_action")
+    confidence: Confidence = 0.7
+    evidence_ids: List[int] = Field(default_factory=list, description="List of evidence_id integers")
+    instrument_type: AssetClass = Field(..., description="Allowed asset class enum value")
 
 class TradingSignal_deepseek(BaseModel):
     evidence: List[EvidenceSpan_deepseek] = Field(default_factory=list)

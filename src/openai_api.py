@@ -120,6 +120,7 @@ class OPENAI_API:
             try:
                 js, summary, used = self.extract_output(resp)
             except:
+                print('error formatting? %s' % dt)
                 yield resp
                 raise
 
@@ -187,8 +188,13 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
     @override
     def extract_output(self, resp):
         text = resp.choices[0].message.content
-        m = self._JSON_FENCE_RE.search(text)
-        js = json.loads(m.group(1).strip())
+
+        try:
+            js = json.loads(text)
+        except:
+            m = self._JSON_FENCE_RE.search(text)
+            js = json.loads(m.group(1).strip())
+            
         js2 = json.dumps(js, indent=2, ensure_ascii=False)
 
         summary = resp.choices[0].message.reasoning_content
