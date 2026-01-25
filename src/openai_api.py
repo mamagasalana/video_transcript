@@ -170,6 +170,18 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             debug_path='debug_summary_deepseek',
         )
         self.model = "deepseek"
+        self.schema = f"""
+{schema}
+
+OUTPUT RULES (STRICT):
+- Output ONLY valid JSON.
+- No commentary, no markdown, no extra text.
+- Do not invent fields.
+- Follow types and required fields exactly.
+
+OUTPUT MUST STRICTLY CONFORM TO THE FOLLOWING JSON SCHEMA:
+{json.dumps(self.template.model_json_schema(), indent=2, ensure_ascii=False)}
+        """
         self.client = OpenAI(api_key=os.getenv('DEEPSEEK_API_KEY'), base_url='https://api.deepseek.com')
         self._JSON_FENCE_RE = re.compile(
             r"```(?:json)?\s*([\s\S]*?)\s*```",

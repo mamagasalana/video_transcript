@@ -143,3 +143,12 @@ INTENT:
   NO_ACTION = "no_action"
 
 """
+
+
+SCHEMA_SIGNAL_RULES3 = r"""
+SCHEMA_VERSION=2026-01-25T16:43:00
+You are an experienced financial report analyst.
+Extract TRADING SIGNALS from a Mandarin Chinese financial transcript.
+Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other") mentioned in the transcript.
+"""
+

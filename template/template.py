@@ -73,14 +73,14 @@ class TradingSignal(BaseModel):
 class EvidenceSpan_deepseek(BaseModel):
     evidence_id: int = Field(..., ge=1, description="Integer starting from 1")
     sentence: str = Field(..., min_length=1, description="Evidence text span (can be fragment).")
-    evidence_type: str = Field(..., min_length=1, description="Free-form label/tag.")
+    evidence_type: str = Field(..., min_length=1, description="Free-form label/tag in english.")
 
 class TradingSignalBase_deepseek(BaseModel):
     signal_id: int = Field(..., ge=1, description="Integer starting from 1")
     instrument: str = Field(..., min_length=1, description="Raw instrument name from transcript")
     instrument_normalized: Optional[str] = Field(
         None,
-        description="Canonical standardized name; null if cannot normalize."
+        description="Canonical standardized name in english; null if cannot normalize."
     )
     intent: Intent = Field(..., description="open_buy/open_sell/close_buy/close_sell/no_action")
     confidence: Confidence = 0.7
