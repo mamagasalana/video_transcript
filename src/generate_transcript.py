@@ -128,10 +128,14 @@ for transcript_path in  tqdm(sorted(glob.glob('transcript/*'))):
     with open(transcript_path, 'r') as ifile:
         transcript_raw =ifile.read()
 
-    transcript_path2 = re.findall(r'\d+', transcript_path)[0]
 
+    transcript_path2 = re.findall(r'\d+', transcript_path)[0]
+    out_file = os.path.join('transcript2', '%s.txt' % transcript_path2)
+    if os.path.exists(out_file):
+        continue
+    
     transcript_clean = normalize_zh_transcript(transcript_raw)
     transcript_clean2 = wrap_by_whitespace(transcript_clean, 60)
     
-    with open(os.path.join('transcript2', '%s.txt' % transcript_path2), 'w') as ofile:
+    with open(out_file, 'w') as ofile:
         transcript_raw =ofile.write(transcript_clean2)

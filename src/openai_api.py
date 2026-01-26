@@ -183,12 +183,12 @@ if __name__ == "__main__":
         break
     
 class OPENAI_API_DEEPSEEK(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str):
+    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, debug_path:str='debug_summary_deepseek'):
         super().__init__(
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
-            debug_path='debug_summary_deepseek',
+            debug_path=debug_path,
         )
         self.model = "deepseek"
         self.schema = f"""
