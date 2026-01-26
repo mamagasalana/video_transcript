@@ -33,8 +33,8 @@ class OPENAI_API:
         self.schema = schema
         self.model = "openai"
         self.template = pydantic_template
-        self.OUTPUT_FOLDER= output_folder
-        self.DEBUG_PATH = debug_path
+        self.OUTPUT_FOLDER= os.path.join('outputs', output_folder)
+        self.DEBUG_PATH = os.path.join('outputs', debug_path)
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
         os.makedirs(self.DEBUG_PATH, exist_ok=True)
         self.client = OpenAI()
@@ -194,13 +194,11 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
         self.schema = f"""
 {schema}
 
-OUTPUT RULES (STRICT):
-- Output ONLY valid JSON.
-- No commentary, no markdown, no extra text.
-- Do not invent fields.
-- Follow types and required fields exactly.
+输出规则（严格）：
+- 仅输出有效的 JSON。
+- 不得输出任何非 JSON 内容（包括说明、注释）。
 
-OUTPUT MUST STRICTLY CONFORM TO THE FOLLOWING JSON SCHEMA:
+输出内容必须严格符合以下 JSON Schema：
 {json.dumps(self.template.model_json_schema(), indent=2, ensure_ascii=False)}
         """
         self.client = OpenAI(api_key=os.getenv('DEEPSEEK_API_KEY'), base_url='https://api.deepseek.com')

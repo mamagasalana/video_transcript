@@ -8,6 +8,24 @@ start_anchor MUST be an exact substring from the transcript and 30 to 40 Chinese
 Extract only what is explicitly stated. Do not invent facts.
 """
 
+SCHEMA_DEVELOPER_DEEPSEEK = r"""
+你是一个用于中文（普通话）财经视频字幕/转写稿的信息抽取系统。
+任务：把整段转写稿切分为若干【主题段 Topic Chunks】并输出结构化结果。
+
+切分规则：
+- 优先：段落数量越少越好；尽量合并成【更少但更大的】主题段。
+- 只有当“主要议题”发生【持续性的改变】时，才新开一个主题段。
+- 不要因为：举例、重复、补充说明、同一观点的延伸、同一主题下的多次强调，而拆分新段。
+- 每个主题段必须围绕一个核心议题，内部可以包含相关的子点与例子。
+
+抽取约束：
+- 只抽取转写稿中【明确说出】的信息；不要补充常识、不要推测、不要发明事实。
+- topic 用简短中文概括该段核心议题（自由文本）。
+- summary 用中文概括该段内容，保持忠实，不添加原文没有的结论。
+- sentence 字段：写该段具有代表性的原文句子/片段；允许用“...”省略中间内容以保持简洁，但需保留足够上下文以看出主题与边界。
+
+"""
+
 
 SCHEMA_SIGNAL_RULES = r"""
 Extract TRADING SIGNALS (forward-looking bets) from a Mandarin Chinese financial transcript.
@@ -152,3 +170,12 @@ Extract TRADING SIGNALS from a Mandarin Chinese financial transcript.
 Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other") mentioned in the transcript.
 """
 
+SCHEMA_SIGNAL_RULES4 = r"""
+SCHEMA_VERSION=2026-01-26T23:37:00
+你是一名经验丰富的金融研究报告分析师。
+请从普通话（中文）金融类逐字稿中提取 TRADING SIGNALS (信号) 。
+请在逐字稿中查找并识别所有被提及的 instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other"）。
+
+何为信号?
+
+"""

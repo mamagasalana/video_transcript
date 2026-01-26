@@ -17,6 +17,23 @@ class TopicChunk(BaseModel):
 class TopicChunks(BaseModel): 
     topic_chunks: List[TopicChunk]
     
+class TopicChunk_deepseek(BaseModel):
+    chunk_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
+    sentence: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "该主题段的代表性原文句子/片段（优先使用原文）。"
+            "为简洁起见，允许用“...”省略中间内容，但必须保留足够上下文以识别主题与边界。"
+            "示例：\"我们先看美债收益率...然后再讨论美元指数\""
+        ),
+    )
+    topic: str = Field(..., min_length=1, description="该段的主题标签（自由文本，尽量短）")
+    summary: str = Field(..., min_length=1, description="该段的中文摘要（只总结原文明确表达的内容）")
+
+class TopicChunks_deepseek(BaseModel):
+    topic_chunks: List[TopicChunk_deepseek] = Field(default_factory=list)
+    
 
 # To extract trading signal
 class AssetClass(str, Enum):
