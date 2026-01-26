@@ -6,7 +6,7 @@ load_dotenv()
 from src.schemas import SCHEMA_DEVELOPER_DEEPSEEK as schema
 from template.template import TopicChunks_deepseek as ts
 
-app = OPENAI_API( ts, 'topic_deepseek', schema)
+app = OPENAI_API( ts, 'topic_deepseek', schema, debug_path="debug_topic_deepseek")
 for _ in app.run_batch('transcript2/202007*.txt'):
     # break
     pass
