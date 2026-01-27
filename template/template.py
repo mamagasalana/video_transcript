@@ -31,18 +31,6 @@ class TopicChunk_deepseek(BaseModel):
             "不得改写、翻译或总结。"
         ),
     )
-
-    end_anchor: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "该段主题在原始逐字稿中的结束锚点。"
-            "必须是逐字稿中出现过的连续原文片段（精确子串，区分全角/半角与标点），"
-            "用于定位该段结束位置。"
-            "尽量短且唯一（建议 8-30 个中文字符），避免过长句子。"
-            "不得改写、翻译或总结。"
-        ),
-    )
     topic: str = Field(..., min_length=1, description="该段的主题标签（自由文本，尽量短）")
     summary: str = Field(..., min_length=1, description="该段的中文摘要（只总结原文明确表达的内容）")
 

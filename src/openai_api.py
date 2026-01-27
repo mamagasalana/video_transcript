@@ -92,12 +92,12 @@ class OPENAI_API:
         used = resp.usage.total_tokens
         return js, summary, used
 
-    def normalize_usage(self, resp, filename):
+    def normalize_usage(self, resp, filename ):
         usage = resp.usage.to_dict()
         return {
             "provider": self.model,
             "model": resp.model,
-            "filename": filename,
+            "filename":  filename,
             "prompt_tokens": usage.get("input_tokens", 0),
             "completion_tokens": usage.get("output_tokens", 0),
             "reasoning_tokens": usage.get("output_tokens_details", {}).get("reasoning_tokens", 0),
@@ -150,7 +150,7 @@ class OPENAI_API:
             spent = ustrack.set(used)
 
             try:
-                ustrack.update_db(self.normalize_usage(resp, str(dt)))
+                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) ))
             except:
                 print('error parsing usage? %s' % dt)
                 yield resp
