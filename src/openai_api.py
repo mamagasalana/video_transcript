@@ -22,7 +22,7 @@ class OPENAI_API:
     def __init__(self, pydantic_template: BaseModel, 
                  output_folder:str, 
                  schema: str, 
-                 debug_path:str='debug_summary/'):
+                 model:str= 'openai'):
         """Initialize the extractor.
 
         Args:
@@ -31,10 +31,10 @@ class OPENAI_API:
             schema: Prompt/schema instructions passed to the model.
         """
         self.schema = schema
-        self.model = "openai"
+        self.model = model
         self.template = pydantic_template
-        self.OUTPUT_FOLDER= os.path.join('outputs', output_folder)
-        self.DEBUG_PATH = os.path.join('outputs', debug_path)
+        self.OUTPUT_FOLDER= os.path.join('outputs/model_output', '%s_%s' % (output_folder, self.model))
+        self.DEBUG_PATH = os.path.join('outputs/reasoning', 'debug_%s_%s' % (output_folder, self.model))
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
         os.makedirs(self.DEBUG_PATH, exist_ok=True)
         self.client = OpenAI()
@@ -83,6 +83,10 @@ class OPENAI_API:
         )
         
         return resp
+
+    def get_json2(self, transcript, topic_chunks):
+        #placeholder
+        pass
 
     def extract_output(self, resp):        
         js = resp.output_parsed.model_dump_json(indent=2)
@@ -168,6 +172,84 @@ class OPENAI_API:
             
             yield resp  # or yield resp.output_parsed, etc.
 
+    def run_batch2(self, glob_pattern: str=None, support_folder: str=None, token_cap=TOKEN_CAP, force=False):
+        """Get support from topic?
+
+        Args:
+            glob_pattern (str, optional): glob file path. Defaults to None.
+            support_folder (str, optional): an experimental function to improve accuracy. Defaults to None.
+            token_cap (_type_, optional): early exit if token cap reach. Defaults to TOKEN_CAP.
+            force (bool, optional): overwrite file if True. Defaults to False.
+        """
+        ustrack = UsageTracker(model=self.model, cap=token_cap)
+        spent = ustrack.get()['spent']
+
+        if glob_pattern:
+            transcripts = sorted(glob.glob(glob_pattern))
+        else:
+            transcripts = sorted(glob.glob('transcript2/*.txt'))
+        pbar = tqdm(transcripts, desc="Extracting", unit="doc")
+        for i, transcript_file in enumerate(pbar, start=1):
+            # stop BEFORE calling if already at/over cap
+            
+            if spent >= token_cap:
+                pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
+                break
+            
+            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+            out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
+            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            if not force and os.path.exists(out_path):
+                continue
+
+            with open(transcript_file, 'r') as ifile:
+                transcript = ifile.read()
+
+            transcript2 = self.normalize_zh_transcript(transcript)
+
+            support_file = glob.glob(os.path.join('outputs/model_output', support_folder, f'{dt}*'))
+            assert support_file, "Support file not found"
+
+            with open(support_file[0], 'r') as ifile:
+                support= ifile.read()
+
+            resp = self.get_json2(transcript2, support)
+
+            try:
+                js, summary, used = self.extract_output(resp)
+            except:
+                print('error formatting? %s' % dt)
+                yield resp
+                raise
+
+            with open(out_path, "w", encoding="utf-8") as ofile:
+                ofile.write(js)
+                
+            with open(debug_path, 'w') as ofile:   
+                ofile.writelines(summary)
+
+            spent = ustrack.set(used)
+
+            try:
+                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) ))
+            except:
+                print('error parsing usage? %s' % dt)
+                yield resp
+                raise
+
+            pbar.set_postfix({
+                "used": used,
+                "spent": spent,
+                "remain": max(token_cap - spent, 0),
+            })
+
+            # stop AFTER call if this call pushed you over
+            if spent >= token_cap:
+                break
+            
+            yield resp  # or yield resp.output_parsed, etc.
+
+
 
 if __name__ == "__main__":
 
@@ -183,14 +265,13 @@ if __name__ == "__main__":
         break
     
 class OPENAI_API_DEEPSEEK(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, debug_path:str='debug_summary_deepseek'):
+    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str):
         super().__init__(
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
-            debug_path=debug_path,
+            model="deepseek"
         )
-        self.model = "deepseek"
         self.schema = f"""
 {schema}
 
@@ -206,7 +287,20 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             r"```(?:json)?\s*([\s\S]*?)\s*```",
             re.IGNORECASE
         )
-                
+
+    @override
+    def get_json2(self, transcript, topic_chunks):
+        resp = self.client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {"role": "system", "content": self.schema},
+                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\n\Topic_chunks:\n<<<\n{topic_chunks}\n>>>"},
+            ],
+            timeout= 300,
+            # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
+        )
+        return resp
+             
     @override
     def get_json(self, transcript):
         resp = self.client.chat.completions.create(

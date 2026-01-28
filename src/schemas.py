@@ -9,14 +9,14 @@ Extract only what is explicitly stated. Do not invent facts.
 """
 
 SCHEMA_DEVELOPER_DEEPSEEK = r"""
-你是一个用于中文（普通话）财经视频字幕/转写稿的信息抽取系统。
-任务：把整段转写稿切分为若干【主题段 Topic Chunks】并输出结构化结果。
+你是一个用于中文(普通话)财经视频字幕/转写稿的信息抽取系统。
+任务:把整段转写稿切分为若干【主题段 Topic Chunks】并输出结构化结果。
 
-切分规则：
-- 优先：段落数量越少越好；尽量合并成【更少但更大的】主题段。
+切分规则:
+- 优先:段落数量越少越好；尽量合并成【更少但更大的】主题段。
 - 只允许合并连续的主题段。
 - 只有当“主要议题”发生【持续性的改变】时，才新开一个主题段。
-- 不要因为：举例、重复、补充说明、同一观点的延伸、同一主题下的多次强调，而拆分新段。
+- 不要因为:举例、重复、补充说明、同一观点的延伸、同一主题下的多次强调，而拆分新段。
 - 每个主题段必须围绕一个核心议题，内部可以包含相关的子点与例子。
 
 """
@@ -165,12 +165,35 @@ Extract TRADING SIGNALS from a Mandarin Chinese financial transcript.
 Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other") mentioned in the transcript.
 """
 
+
 SCHEMA_SIGNAL_RULES4 = r"""
-SCHEMA_VERSION=2026-01-26T23:37:00
-你是一名经验丰富的金融研究报告分析师。
-请从普通话（中文）金融类逐字稿中提取 TRADING SIGNALS (信号) 。
-请在逐字稿中查找并识别所有被提及的 instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other"）。
+SCHEMA_VERSION=2026-01-28T21:10:00
+你是一个中文(普通话)财经逐字稿的信息抽取系统。
 
-何为信号?
+输入:
+- Transcript:完整逐字稿
+- Topic_chunks:已切分好的主题段
 
+目标:
+从 Transcript 识别所有被提及的金融工具(instrument)，并基于 Topic_chunks 提取交易信号。
+
+交易意图 intent(严格使用以下枚举):
+- open_buy  :建议/暗示做多、买入、加仓、看涨、做多
+- open_sell :建议/暗示做空、卖出、减仓、看跌、做空
+- close_buy :对“多头/买入方向”提示风险/止盈止损/离场/收手/不再做多
+- close_sell:对“空头/卖出方向”提示风险/止盈止损/离场/收手/不再做空
+- unclear   :仅提及、仅用于举例/对比/解释机制，或没有可落地的方向性建议
+
+资产类别 instrument_type(严格使用以下枚举):
+("stock","fx","commodity","crypto","index","rate","etf","bond","other")
+
+核心约束(必须遵守):
+1) instrument 必须来自 Transcript 的原文写法(精确抄写，不要改写/翻译/补全)，用于可追溯。
+2) instrument_normalized 可选:用于统一检索(如股票代码、标准合约名、通用写法)，但不得凭空杜撰不存在的标的。
+3) 你只能使用 Topic_chunks 作为证据来源:不得引用逐字稿原句、不得给 sentence 级证据。
+4) evidence 的粒度是“chunk”:每条 evidence 必须绑定一个 chunk_id，并用 remark 解释“为什么这个 chunk 支持该信号”。
+5) signals.evidence_ids 只能引用 evidence.evidence_id；不得直接写 chunk_id 到 signals。
+6) 先生成 evidence，再生成 signals:signals 中引用的 evidence_id 必须在 evidence 列表中真实存在。
+7) 覆盖性:所有在 Transcript 中出现过的可识别 instrument 都要输出一条 signal(至少 intent=unclear)。
+8) 去重:同一 instrument 在 Transcript 多次出现时，合并成同一条 signal；如果同一 instrument 在不同 chunk 出现相反意图，优先输出更“可执行/更明确/更新”的意图，并在 evidence_ids 中覆盖相关 chunk。
 """
