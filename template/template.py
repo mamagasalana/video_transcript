@@ -125,8 +125,7 @@ class EvidenceSpan_deepseek2(BaseModel):
         "说明为什么支持该 intent（open_buy/open_sell/close_buy/close_sell/unclear）。"
         "不得引入 chunk 之外的新信息；"
         "尽量具体到‘观点/条件/风险/操作倾向’，而不是泛泛而谈。"
-    ),
-)
+    ))
 
 class TradingSignalBase_deepseek2(BaseModel):
     signal_id: int = Field(..., ge=1, description="从1开始递增的分段编号")

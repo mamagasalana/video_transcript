@@ -167,8 +167,8 @@ Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","
 
 
 SCHEMA_SIGNAL_RULES4 = r"""
-SCHEMA_VERSION=2026-01-28T21:10:00
-你是一个中文(普通话)财经逐字稿的信息抽取系统。
+SCHEMA_VERSION=2026-01-28T23:10:00
+你是一个中文(普通话)经验丰富的财经分析师。
 
 输入:
 - Transcript:完整逐字稿
@@ -187,11 +187,11 @@ SCHEMA_VERSION=2026-01-28T21:10:00
 资产类别 instrument_type(严格使用以下枚举):
 ("stock","fx","commodity","crypto","index","rate","etf","bond","other")
 
-核心约束(必须遵守):
-1) instrument 必须来自 Transcript 的原文写法(精确抄写，不要改写/翻译/补全)，用于可追溯。
-2) instrument_normalized 可选:用于统一检索(如股票代码、标准合约名、通用写法)，但不得凭空杜撰不存在的标的。
-3) 你只能使用 Topic_chunks 作为证据来源:不得引用逐字稿原句、不得给 sentence 级证据。
-4) evidence 的粒度是“chunk”:每条 evidence 必须绑定一个 chunk_id，并用 remark 解释“为什么这个 chunk 支持该信号”。
+核心约束（必须遵守）：
+1) instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全），用于可追溯。
+2) instrument_normalized 可选：用于统一检索/纠错（如股票代码、标准合约名、常用标准写法）。仅在把握较大时填写；不确定则留空，不得凭空杜撰。
+3) 证据必须归属到 Topic_chunks：每条 evidence 必须绑定一个 chunk_id，并填写该 chunk 的 chunk_summary。
+4) evidence.remark 是证据摘要（why-summary）：说明为何该 chunk 支持该信号；不得引入 chunk 之外信息；不要大段复制原文。
 5) signals.evidence_ids 只能引用 evidence.evidence_id；不得直接写 chunk_id 到 signals。
 6) 先生成 evidence，再生成 signals:signals 中引用的 evidence_id 必须在 evidence 列表中真实存在。
 7) 覆盖性:所有在 Transcript 中出现过的可识别 instrument 都要输出一条 signal(至少 intent=unclear)。

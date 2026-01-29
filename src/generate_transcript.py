@@ -1,4 +1,6 @@
+from dotenv import load_dotenv
 
+load_dotenv()
 
 from faster_whisper import WhisperModel
 import logging
@@ -51,7 +53,11 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
     FOUT = f'transcript/{dt}.txt'
 
     if os.path.exists(FOUT):
-        continue
+        with open(FOUT, 'r') as ifile:
+            head = ifile.read()
+        
+        if head:
+            continue
 
     file_start = time.perf_counter()   # tic for this file
     print("Transcribing %s ... this may take a while." % dt)
