@@ -197,3 +197,39 @@ SCHEMA_VERSION=2026-01-28T23:10:00
 7) 覆盖性:所有在 Transcript 中出现过的可识别 instrument 都要输出一条 signal(至少 intent=unclear)。
 8) 去重:同一 instrument 在 Transcript 多次出现时，合并成同一条 signal；如果同一 instrument 在不同 chunk 出现相反意图，优先输出更“可执行/更明确/更新”的意图，并在 evidence_ids 中覆盖相关 chunk。
 """
+
+SCHEMA_SIGNAL_RULES5 = r"""
+SCHEMA_VERSION=2026-01-30T23:10:00
+你是一个会中文(普通话)而且经验丰富的财经分析师。 
+
+输入:
+- Transcript: 已切分好的逐字稿。结构为 Transcript.topic_chunks[]，每段含 chunk_id/topic/summary/transcript。
+
+目标:
+- 从 Transcript.topic_chunks[*].transcript 识别所有被提及的金融工具(instrument)，并提取交易信号。
+
+
+交易意图 intent(严格使用以下枚举):
+- open_buy  :建议/暗示做多、买入、加仓、看涨、做多
+- open_sell :建议/暗示做空、卖出、减仓、看跌、做空
+- close_buy :对“多头/买入方向”提示风险/止盈止损/离场/收手/不再做多
+- close_sell:对“空头/卖出方向”提示风险/止盈止损/离场/收手/不再做空
+- unclear   :仅提及、仅用于举例/对比/解释机制，或没有可落地的方向性建议
+
+
+资产类别 instrument_type(严格使用以下枚举):
+("stock","fx","commodity","crypto","index","rate","etf","bond","other")
+
+
+核心约束（必须遵守）：
+1) signals[*].instrument 必须来自原文写法（精确抄写），且必须能在至少一个被引用 evidence.chunk_id 对应的 transcript 中用完全一致字符串匹配到（不改字/不补全/不翻译/不改空格/不改大小写）。
+2) evidence.remark 必须是中文“推理摘要”：解释该 chunk 的观点/条件/风险/操作倾向为何支持该intent；不得引入 chunk 之外信息。
+3) instrument_normalized 仅用于统一检索/纠错；不得凭空杜撰。若不确定则填 null。若纠错/推断，请在相关 evidence.remark 写清原因，不得引入 chunk 外信息。
+4) intent 必须严格使用枚举。unclear 仅在：仅提及/仅举例/仅解释机制/无可落地方向，或存在冲突且无法裁决时使用。
+5) instrument_type 必须严格使用枚举。若类别并非原文明示而是推断，请在关键 evidence.remark 末尾追加“（类别为推断）”。
+6) 覆盖性：Transcript 中出现的所有可识别 instrument 都必须输出一条 signal（至少 intent=unclear）。
+7) 允许同一 instrument / instrument_normalized 在 signals[] 中出现多条 signal（不同 signal_id），代表不同 chunk/阶段/观点。每条 signal 的 evidence_ids 必须能自洽支持该条 intent；不要为了去重强行合并。
+8) 证据粒度：只能用 chunk 级证据。每条 evidence 必须绑定 chunk_id，并在 remark 中解释为什么支持该 intent（或为何只能 unclear）。不得引入 chunk 外信息。
+9) 引用合法性：signals[*].evidence_ids 只能引用 evidence[*].evidence_id；不得直接写 chunk_id 到 signals。
+10) 生成顺序：先 evidence 后 signals。signals 引用的 evidence_id 必须真实存在于 evidence 列表。
+"""

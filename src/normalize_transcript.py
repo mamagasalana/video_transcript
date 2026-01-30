@@ -65,4 +65,8 @@ class NormFinder:
         c = Counter(implied_starts)
         # print(len(needle_n), implied_starts)
         s_hat, votes = c.most_common(1)[0]
-        return s_hat, self.norm2raw[s_hat], votes , len(implied_starts), c
+        return { 'normalized_idx': s_hat,
+                'raw_idx': self.norm2raw[s_hat], 
+                'win_vote' : votes ,
+                 'total_vote' : len(implied_starts), 
+                 'extra_debug': c}
