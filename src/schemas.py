@@ -160,9 +160,22 @@ INTENT:
 
 SCHEMA_SIGNAL_RULES3 = r"""
 SCHEMA_VERSION=2026-01-25T16:43:00
-You are an experienced financial report analyst.
-Extract TRADING SIGNALS from a Mandarin Chinese financial transcript.
-Look for ALL instrument_type ("stock","fx","commodity","crypto","index","rate","etf","bond","other") mentioned in the transcript.
+你是一个会中文(普通话)而且经验丰富的财经分析师。 
+
+目标:
+从 Transcript 识别所有被提及的金融工具(instrument)，并提取交易信号。
+
+资产类别 instrument_type(严格使用以下枚举):
+("stock","fx","commodity","crypto","index","rate","etf","bond","other")
+
+交易意图 intent(严格使用以下枚举):
+open_buy_explicit: 明确、直接建议做多/买入/加仓
+open_buy_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等
+open_sell_explicit: 明确、直接建议做空/卖出/减仓
+open_sell_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键价位、基本面利空、资金/情绪/仓位变化、估值/风险溢价不利、事件风险、概率倾向下跌等
+close_buy: 对多头方向提示风险/止盈止损/离场/不再做多
+close_sell: 对空头方向提示风险/止盈止损/离场/不再做空
+unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议
 """
 
 
@@ -211,9 +224,9 @@ SCHEMA_VERSION=2026-01-30T23:10:00
 
 交易意图 intent(严格使用以下枚举):
 open_buy_explicit: 明确、直接建议做多/买入/加仓
-open_buy_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如给出趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等，并常见话术如“偏多 / 看涨 / 大概率上涨 / 回调可关注 / 多头更优 / 逢低布局
+open_buy_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等
 open_sell_explicit: 明确、直接建议做空/卖出/减仓
-open_sell_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键阻力/破位、基本面利空、资金流出、情绪转差、估值/风险溢价不利、事件风险、概率倾向下跌等，并常见话术如“偏空 / 看跌 / 大概率下跌 / 反弹可考虑 / 空头更优 / 逢高压力”。
+open_sell_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键价位、基本面利空、资金/情绪/仓位变化、估值/风险溢价不利、事件风险、概率倾向下跌等
 close_buy: 对多头方向提示风险/止盈止损/离场/不再做多
 close_sell: 对空头方向提示风险/止盈止损/离场/不再做空
 unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议
