@@ -221,3 +221,42 @@ SCHEMA_VERSION=2026-01-30T23:10:00
 9) 引用合法性：signals[*].evidence_ids 只能引用 evidence[*].evidence_id；不得直接写 chunk_id 到 signals。
 10) 生成顺序：先 evidence 后 signals。signals 引用的 evidence_id 必须真实存在于 evidence 列表。
 """
+
+
+SCHEMA_SIGNAL_RULES_WITH_INSTRUMENT_GIVEN = r"""
+SCHEMA_VERSION=2026-01-31T23:10:00
+你是一个中文(普通话)经验丰富的财经分析师。
+
+输入:
+- Transcript：完整逐字稿
+- Helper：instruments JSON（已抽取好的 instrument 列表，包含 instrument_id / instrument / instrument_normalized / instrument_type）
+
+目标:
+基于 Transcript，对 Helper 中列出的每一个 instrument 逐一判断其交易意图（intent）并输出交易信号。
+必须覆盖 Helper 的所有 instrument：每个 instrument 都要输出一条 signal（至少 intent=unclear）。
+
+核心约束（必须遵守）：
+1) 覆盖性：signals 中必须包含 Helper 的全部 instrument_id；不允许遗漏。
+2) 不新增标的：不得在 signals 中输出 Helper 之外的任何 instrument；不得自行补充未出现于 Helper 的标的。
+3) 以 Transcript 为准：所有 intent 判断只能来自 Transcript 明确表达的内容；不得引入 Transcript 之外的新信息或常识推断。
+4) 先 evidence 后 signals：必须先生成 evidence 列表，再生成 signals 列表；signals 引用的 evidence_id 必须在 evidence 中真实存在。
+5) 去重合并：同一 instrument_id 只输出一条 signal；如 Transcript 多处提及，合并证据到同一条 signal 中。
+6) Helper 优先：instrument 的写法必须与 Helper 的 instrument 字段一致（精确拷贝），用于可追溯；instrument_normalized / instrument_type 也以 Helper 为准（直接沿用）。
+"""
+
+SCHEMA_INSTRUMENT_RULES = r"""
+SCHEMA_VERSION=2026-01-31T22:54:00
+你是一个会中文(普通话)而且经验丰富的财经分析师。
+
+目标:
+从 Transcript 中识别并抽取所有被提及的金融工具(instrument)。
+
+输出要求:
+1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次）。
+2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
+3) 去重合并：同一 instrument 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
+4) 可选标准化：instrument_normalized 允许为空；如填写，用于统一检索（如股票代码、标准合约名、通用写法），但不得凭空杜撰 Transcript 中不存在的标的。
+
+资产类别 instrument_type（严格使用以下枚举）:
+("stock","fx","commodity","crypto","index","rate","etf","bond","other")
+"""

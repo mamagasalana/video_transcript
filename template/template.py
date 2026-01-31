@@ -195,3 +195,43 @@ class TradingSignalBase_deepseek3(BaseModel):
 class TradingSignal_deepseek3(BaseModel):
     evidence: List[EvidenceSpan_deepseek3] = Field(default_factory=list)
     signals: List[TradingSignalBase_deepseek3] = Field(default_factory=list)
+
+
+
+field_instrument_from_helper_deepseek =  Field(..., min_length=1, 
+    description=("来自helper.instruments.instrument"))
+field_instrument_normalized_from_helper_deepseek = Field( ...,
+    description=("来自helper.instruments.instrument_normalized"))
+
+class EvidenceSpan_deepseek4(BaseModel):
+    evidence_id: int = field_id_deepseek
+    evidence_explanation: str = Field(..., min_length=1,     
+        description=(
+        "证据摘要：用中文概括该 transcript 中与该信号直接相关的内容，"
+        "说明为什么支持该 intent。"
+        "不得引入 transcript 之外的新信息；"
+        "尽量具体到‘观点/条件/风险/操作倾向’，而不是泛泛而谈。"
+    ))
+
+class TradingSignalBase_deepseek4(BaseModel):
+    signal_id: int = field_id_deepseek
+    instrument: str = field_instrument_from_helper_deepseek
+    instrument_normalized: str = field_instrument_normalized_from_helper_deepseek
+    intent: Intent = field_intent_deepseek
+    evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
+    instrument_type: AssetClass = field_instrument_type_deepseek
+
+class TradingSignal_deepseek4(BaseModel):
+    evidence: List[EvidenceSpan_deepseek4] = Field(default_factory=list)
+    signals: List[TradingSignalBase_deepseek4] = Field(default_factory=list)
+
+
+# to standardize signal instrument for future comparison purpose
+class TradingInstrumentBase_deepseek(BaseModel):
+    instrument_id: int = field_id_deepseek
+    instrument: str = field_instrument_deepseek
+    instrument_normalized: str = field_instrument_normalized_deepseek
+    instrument_type: AssetClass = field_instrument_type_deepseek
+
+class TradingInstrument_deepseek(BaseModel):
+    instruments: List[TradingInstrumentBase_deepseek] = Field(default_factory=list)

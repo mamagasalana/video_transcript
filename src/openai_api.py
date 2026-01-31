@@ -84,9 +84,25 @@ class OPENAI_API:
         
         return resp
 
-    def get_json2(self, transcript, topic_chunks):
-        #placeholder
-        pass
+    def get_json2(self, transcript, helper):
+        resp =  self.client.responses.parse(
+        model="gpt-5-nano",
+        input=[
+            {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
+            {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>\n\Helper:\n<<<\n{helper}\n>>>"}]}
+            ],
+        text_format=self.template,
+        text={"verbosity":"low"},
+        reasoning={"effort": "high", "summary":"detailed"},
+        tools=[],
+        store=True,
+        include=[
+        ],
+        timeout= 300,
+        # max_output_tokens=1000
+        )
+        
+        return resp
 
     def extract_output(self, resp):        
         js = resp.output_parsed.model_dump_json(indent=2)
@@ -172,12 +188,12 @@ class OPENAI_API:
             
             yield resp  # or yield resp.output_parsed, etc.
 
-    def run_batch2(self, glob_pattern: str=None, support_folder: str=None, token_cap=TOKEN_CAP, force=False):
+    def run_batch_with_helper(self, glob_pattern: str=None, helper_folder: str=None, token_cap=TOKEN_CAP, force=False):
         """Get support from topic?
 
         Args:
             glob_pattern (str, optional): glob file path. Defaults to None.
-            support_folder (str, optional): an experimental function to improve accuracy. Defaults to None.
+            helper_folder (str, optional): an experimental function to improve accuracy. Defaults to None.
             token_cap (_type_, optional): early exit if token cap reach. Defaults to TOKEN_CAP.
             force (bool, optional): overwrite file if True. Defaults to False.
         """
@@ -207,7 +223,7 @@ class OPENAI_API:
 
             transcript2 = self.normalize_zh_transcript(transcript)
 
-            support_file = glob.glob(os.path.join('outputs/model_output', support_folder, f'{dt}*'))
+            support_file = glob.glob(os.path.join('outputs/model_output', helper_folder, f'{dt}*'))
             assert support_file, "Support file not found"
 
             with open(support_file[0], 'r') as ifile:
@@ -289,12 +305,12 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
         )
 
     @override
-    def get_json2(self, transcript, topic_chunks):
+    def get_json2(self, transcript, helper):
         resp = self.client.chat.completions.create(
             model="deepseek-reasoner",
             messages=[
                 {"role": "system", "content": self.schema},
-                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\n\Topic_chunks:\n<<<\n{topic_chunks}\n>>>"},
+                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\n\Helper:\n<<<\n{helper}\n>>>"},
             ],
             timeout= 300,
             # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
