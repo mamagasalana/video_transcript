@@ -51,10 +51,12 @@ class AssetClass(str, Enum):
     OTHER = "other"
 
 class Intent(str, Enum):
-    OPEN_BUY = "open_buy"     # initiate/open/add exposure
-    OPEN_SELL = "open_sell"   # initiate/open/add exposure
-    CLOSE_BUY = "close_buy"     # close/reduce/exit exposure
-    CLOSE_SELL = "close_sell"   # close/reduce/exit exposure
+    OPEN_BUY_IMPLICIT = "open_buy_implicit"     
+    OPEN_BUY_EXPLICIT = "open_buy_explicit"  
+    OPEN_SELL_IMPLICIT = "open_sell_implicit"   
+    OPEN_SELL_EXPLICIT = "open_sell_explicit"    
+    CLOSE_BUY = "close_buy"     
+    CLOSE_SELL = "close_sell"   
     UNCLEAR = "unclear"
 
 class InstrumentRef(BaseModel):
@@ -102,7 +104,7 @@ class TradingSignalBase_deepseek(BaseModel):
         None,
         description="Canonical standardized name in english; null if cannot normalize."
     )
-    intent: Intent = Field(..., description="open_buy/open_sell/close_buy/close_sell/no_action")
+    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
     confidence: Confidence = 0.7
     evidence_ids: List[int] = Field(default_factory=list, description="List of evidence_id integers")
     instrument_type: AssetClass = Field(..., description="Allowed asset class enum value")
@@ -137,7 +139,7 @@ class TradingSignalBase_deepseek2(BaseModel):
             "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
             )
     )
-    intent: Intent = Field(..., description="open_buy/open_sell/close_buy/close_sell/unclear")
+    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
     instrument_type: AssetClass = Field(..., description="资产类别")
 
@@ -170,7 +172,7 @@ class TradingSignalBase_deepseek3(BaseModel):
             "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
             )
     )
-    intent: Intent = Field(..., description="open_buy/open_sell/close_buy/close_sell/unclear")
+    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
     instrument_type: AssetClass = Field(..., description="资产类别")
 
