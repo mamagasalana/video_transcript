@@ -15,28 +15,7 @@ class TopicChunk(BaseModel):
     key_indicators_mentioned: List[str] = Field(default_factory=list)
 
 class TopicChunks(BaseModel): 
-    topic_chunks: List[TopicChunk]
-    
-class TopicChunk_deepseek(BaseModel):
-    chunk_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
-
-    start_anchor: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "该段主题在原始逐字稿中的起始锚点。"
-            "必须是逐字稿中出现过的连续原文片段（精确子串，区分全角/半角与标点），"
-            "用于定位该段开始位置。"
-            "尽量短且唯一（建议 8-30 个中文字符），避免过长句子。"
-            "不得改写、翻译或总结。"
-        ),
-    )
-    topic: str = Field(..., min_length=1, description="该段的主题标签（自由文本，尽量短）")
-    summary: str = Field(..., min_length=1, description="该段的中文摘要（只总结原文明确表达的内容）")
-
-class TopicChunks_deepseek(BaseModel):
-    topic_chunks: List[TopicChunk_deepseek] = Field(default_factory=list)
-    
+    topic_chunks: List[TopicChunk]    
 
 # To extract trading signal
 class AssetClass(str, Enum):
@@ -92,8 +71,57 @@ class TradingSignal(BaseModel):
     evidence: List[EvidenceSpan] = Field(default_factory=list)
     signals: List[TradingSignalBase] = Field(default_factory=list)
 
+##########################################################################
+# Deepseek section
+##########################################################################
+
+
+field_id_deepseek = Field(..., ge=1, description="从1开始递增的分段编号")
+field_instrument_deepseek =  Field(..., min_length=1, 
+    description=(
+        "该资产于transcript的原文。"
+        "必须是明确是可交易资产。"
+    ))
+field_instrument_normalized_deepseek = Field( ...,
+    description=(
+    "标准化/纠错后的资产名称，用于对齐和检索（如股票代码、官方全称、常用英文名/缩写）。"
+    "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
+    ))
+
+field_intent_deepseek = Field(..., 
+    description=(
+    "open_buy_explicit: 明确、直接建议做多/买入/加仓。"
+    "open_buy_implicit: 暗示,通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等。"
+    "open_sell_explicit: 明确、直接建议做空/卖出/减仓。"
+    "open_sell_implicit: 暗示,通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键价位、基本面利空、资金/情绪/仓位变化、估值/风险溢价不利、事件风险、概率倾向下跌等。"
+    "close_buy: 对多头方向提示风险/止盈止损/离场/不再做多。"
+    "close_sell: 对空头方向提示风险/止盈止损/离场/不再做空。"
+    "unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议。")
+    )
+field_instrument_type_deepseek = Field(..., description="资产类别")
+
+class TopicChunk_deepseek(BaseModel):
+    chunk_id: int = field_id_deepseek
+
+    start_anchor: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "该段主题在原始逐字稿中的起始锚点。"
+            "必须是逐字稿中出现过的连续原文片段（精确子串，区分全角/半角与标点），"
+            "用于定位该段开始位置。"
+            "尽量短且唯一（建议 8-30 个中文字符），避免过长句子。"
+            "不得改写、翻译或总结。"
+        ),
+    )
+    topic: str = Field(..., min_length=1, description="该段的主题标签（自由文本，尽量短）")
+    summary: str = Field(..., min_length=1, description="该段的中文摘要（只总结原文明确表达的内容）")
+
+class TopicChunks_deepseek(BaseModel):
+    topic_chunks: List[TopicChunk_deepseek] = Field(default_factory=list)
+
 class EvidenceSpan_deepseek(BaseModel):
-    evidence_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
+    evidence_id: int = field_id_deepseek
     evidence_explanation: str = Field(..., min_length=1,     
         description=(
         "证据摘要：用中文概括该 transcript 中与该信号直接相关的内容，"
@@ -103,27 +131,20 @@ class EvidenceSpan_deepseek(BaseModel):
     ))
 
 class TradingSignalBase_deepseek(BaseModel):
-    signal_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
-    instrument: str = Field(..., min_length=1, description="该资产于transcript的原文")
-    instrument_normalized: str = Field(
-        None,
-        description=(
-            "标准化/纠错后的资产名称，用于对齐和检索（如股票代码、官方全称、常用英文名/缩写）。"
-            "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
-            )
-    )
-    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
+    signal_id: int = field_id_deepseek
+    instrument: str = field_instrument_deepseek
+    instrument_normalized: str = field_instrument_normalized_deepseek
+    intent: Intent = field_intent_deepseek
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
-    instrument_type: AssetClass = Field(..., description="资产类别")
+    instrument_type: AssetClass = field_instrument_type_deepseek
 
 class TradingSignal_deepseek(BaseModel):
     evidence: List[EvidenceSpan_deepseek] = Field(default_factory=list)
     signals: List[TradingSignalBase_deepseek] = Field(default_factory=list)
 
 
-
 class EvidenceSpan_deepseek2(BaseModel):
-    evidence_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
+    evidence_id: int = field_id_deepseek
     chunk_id: int = Field(..., ge=1, description="来自topic_chunk的chunk_id")
     chunk_topic: str = Field(..., min_length=1, description="对应 topic_chunk.topic(可复制)")
     remark: str = Field(
@@ -137,18 +158,12 @@ class EvidenceSpan_deepseek2(BaseModel):
     ))
 
 class TradingSignalBase_deepseek2(BaseModel):
-    signal_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
-    instrument: str = Field(..., min_length=1, description="该资产于transcript的原文")
-    instrument_normalized: str = Field(
-        None,
-        description=(
-            "标准化/纠错后的资产名称，用于对齐和检索（如股票代码、官方全称、常用英文名/缩写）。"
-            "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
-            )
-    )
-    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
+    signal_id: int = field_id_deepseek
+    instrument: str = field_instrument_deepseek
+    instrument_normalized: str = field_instrument_normalized_deepseek
+    intent: Intent = field_intent_deepseek
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
-    instrument_type: AssetClass = Field(..., description="资产类别")
+    instrument_type: AssetClass = field_instrument_type_deepseek
 
 class TradingSignal_deepseek2(BaseModel):
     evidence: List[EvidenceSpan_deepseek2] = Field(default_factory=list)
@@ -157,7 +172,7 @@ class TradingSignal_deepseek2(BaseModel):
 
 # 2026-01-30T23:10:00
 class EvidenceSpan_deepseek3(BaseModel):
-    evidence_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
+    evidence_id: int = field_id_deepseek
     chunk_id: int = Field(..., ge=1, description="来自topic_chunk的chunk_id")
     remark: str = Field(
     ...,
@@ -170,18 +185,12 @@ class EvidenceSpan_deepseek3(BaseModel):
     ))
 
 class TradingSignalBase_deepseek3(BaseModel):
-    signal_id: int = Field(..., ge=1, description="从1开始递增的分段编号")
-    instrument: str = Field(..., min_length=1, description="该资产于transcript的原文")
-    instrument_normalized: Optional[str] = Field(
-        None,
-        description=(
-            "标准化/纠错后的资产名称，用于对齐和检索（如股票代码、官方全称、常用英文名/缩写）。"
-            "当你判断原文可能存在笔误/谐音/错别字时，也可以在此给出你认为最可能的标准名称。"
-            )
-    )
-    intent: Intent = Field(..., description="open_buy_explicit/open_buy_implicit/open_sell_implicit/open_sell_explicit/close_buy/close_sell/unclear")
+    signal_id: int = field_id_deepseek
+    instrument: str = field_instrument_deepseek
+    instrument_normalized: str = field_instrument_normalized_deepseek
+    intent: Intent = field_intent_deepseek
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
-    instrument_type: AssetClass = Field(..., description="资产类别")
+    instrument_type: AssetClass = field_instrument_type_deepseek
 
 class TradingSignal_deepseek3(BaseModel):
     evidence: List[EvidenceSpan_deepseek3] = Field(default_factory=list)

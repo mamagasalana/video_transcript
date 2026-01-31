@@ -164,18 +164,10 @@ SCHEMA_VERSION=2026-01-25T16:43:00
 
 目标:
 从 Transcript 识别所有被提及的金融工具(instrument)，并提取交易信号。
+所有在 Transcript 中出现过的可识别 instrument 都要输出一条 signal(至少 intent=unclear)。
 
 资产类别 instrument_type(严格使用以下枚举):
 ("stock","fx","commodity","crypto","index","rate","etf","bond","other")
-
-交易意图 intent(严格使用以下枚举):
-open_buy_explicit: 明确、直接建议做多/买入/加仓
-open_buy_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等
-open_sell_explicit: 明确、直接建议做空/卖出/减仓
-open_sell_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键价位、基本面利空、资金/情绪/仓位变化、估值/风险溢价不利、事件风险、概率倾向下跌等
-close_buy: 对多头方向提示风险/止盈止损/离场/不再做多
-close_sell: 对空头方向提示风险/止盈止损/离场/不再做空
-unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议
 """
 
 
@@ -189,13 +181,6 @@ SCHEMA_VERSION=2026-01-28T23:10:00
 
 目标:
 从 Transcript 识别所有被提及的金融工具(instrument)，并基于 Topic_chunks 提取交易信号。
-
-交易意图 intent(严格使用以下枚举):
-- open_buy  :建议/暗示做多、买入、加仓、看涨、做多
-- open_sell :建议/暗示做空、卖出、减仓、看跌、做空
-- close_buy :对“多头/买入方向”提示风险/止盈止损/离场/收手/不再做多
-- close_sell:对“空头/卖出方向”提示风险/止盈止损/离场/收手/不再做空
-- unclear   :仅提及、仅用于举例/对比/解释机制，或没有可落地的方向性建议
 
 资产类别 instrument_type(严格使用以下枚举):
 ("stock","fx","commodity","crypto","index","rate","etf","bond","other")
@@ -221,19 +206,8 @@ SCHEMA_VERSION=2026-01-30T23:10:00
 目标:
 - 从 Transcript.topic_chunks[*].transcript 识别所有被提及的金融工具(instrument)，并提取交易信号。
 
-
-交易意图 intent(严格使用以下枚举):
-open_buy_explicit: 明确、直接建议做多/买入/加仓
-open_buy_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏多: 例如趋势判断、关键价位、基本面利多、资金/情绪/仓位变化、时间窗口、胜率/概率、风险回报更优等
-open_sell_explicit: 明确、直接建议做空/卖出/减仓
-open_sell_implicit: 通过多项判断依据（观点/指标/条件/情景）共同指向偏空: 例如趋势转弱、关键价位、基本面利空、资金/情绪/仓位变化、估值/风险溢价不利、事件风险、概率倾向下跌等
-close_buy: 对多头方向提示风险/止盈止损/离场/不再做多
-close_sell: 对空头方向提示风险/止盈止损/离场/不再做空
-unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议
-
 资产类别 instrument_type(严格使用以下枚举):
 ("stock","fx","commodity","crypto","index","rate","etf","bond","other")
-
 
 核心约束（必须遵守）：
 1) signals[*].instrument 必须来自原文写法（精确抄写），且必须能在至少一个被引用 evidence.chunk_id 对应的 transcript 中用完全一致字符串匹配到（不改字/不补全/不翻译/不改空格/不改大小写）。
