@@ -137,9 +137,14 @@ for transcript_path in  tqdm(sorted(glob.glob('transcript/*'))):
 
     transcript_path2 = re.findall(r'\d+', transcript_path)[0]
     out_file = os.path.join('transcript2', '%s.txt' % transcript_path2)
+
     if os.path.exists(out_file):
-        continue
-    
+        with open(out_file, 'r') as ifile:
+            head = ifile.read()
+        
+        if head:
+            continue
+        
     transcript_clean = normalize_zh_transcript(transcript_raw)
     transcript_clean2 = wrap_by_whitespace(transcript_clean, 60)
     

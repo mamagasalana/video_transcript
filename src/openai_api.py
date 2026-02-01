@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from typing_extensions import override
 
 load_dotenv() 
-
+SEED  = 12345
 
 to_simplified = OpenCC("t2s") 
 
@@ -266,27 +266,13 @@ class OPENAI_API:
             yield resp  # or yield resp.output_parsed, etc.
 
 
-
-if __name__ == "__main__":
-
-    load_dotenv() 
-    OUTPUT_FOLDER= os.getenv('OUTPUT_FOLDER')
-    assert OUTPUT_FOLDER , "output folder missing?"
-
-    from src.schemas import SCHEMA_DEVELOPER_OPENAI
-    from template.template import TopicChunks
-
-    app = OPENAI_API( TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
-    for _ in app.run_batch():
-        break
-    
 class OPENAI_API_DEEPSEEK(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str):
+    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, model: str="deepseek-reasoner"):
         super().__init__(
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
-            model="deepseek"
+            model=model
         )
         self.schema = f"""
 {schema}
@@ -307,12 +293,13 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
     @override
     def get_json2(self, transcript, helper):
         resp = self.client.chat.completions.create(
-            model="deepseek-reasoner",
+            model=self.model,
             messages=[
                 {"role": "system", "content": self.schema},
                 {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\n\Helper:\n<<<\n{helper}\n>>>"},
             ],
             timeout= 300,
+            seed=SEED,
             # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
         )
         return resp
@@ -320,12 +307,13 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
     @override
     def get_json(self, transcript):
         resp = self.client.chat.completions.create(
-            model="deepseek-reasoner",
+            model=self.model,
             messages=[
                 {"role": "system", "content": self.schema},
                 {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>"},
             ],
             timeout= 300,
+            seed=SEED,
             # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
         )
         return resp
@@ -343,7 +331,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             
         js2 = json.dumps(js, indent=2, ensure_ascii=False)
 
-        summary = resp.choices[0].message.reasoning_content
+        summary = getattr(resp.choices[0].message, 'reasoning_content', '')
         used = resp.usage.total_tokens
         return js2, summary, used
     
@@ -360,3 +348,17 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             "cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
         }
+    
+if __name__ == "__main__":
+
+    load_dotenv() 
+    OUTPUT_FOLDER= os.getenv('OUTPUT_FOLDER')
+    assert OUTPUT_FOLDER , "output folder missing?"
+
+    from src.schemas import SCHEMA_DEVELOPER_OPENAI
+    from template.template import TopicChunks
+
+    app = OPENAI_API( TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
+    for _ in app.run_batch():
+        break
+    
