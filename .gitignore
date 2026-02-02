@@ -6,8 +6,9 @@ __pycache__/*
 *.json
 *.txt
 src/__pycache__/*
-template/__pycache__/template.cpython-311.pyc
+*.pyc
 usage.db
 *.csv
 *.txt_
 *.json_
+
