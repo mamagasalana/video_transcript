@@ -84,20 +84,7 @@ class TradingSignal(BaseModel):
 field_id_deepseek = Field(..., ge=1, description="从1开始递增的分段编号")
 field_instrument_deepseek =  Field(..., min_length=1, 
 description=(
-    "该资产于transcript的原文。"
-    "必须是明确的可交易资产，需满足以下标准："
-    "1. 具有明确交易市场（交易所、交易平台）"
-    "2. 有足够流动性（非极冷门品种）"
-    "3. 标准化程度高（期货、主要股票等）"
-    
-    "分类标准与范围（严格遵循）："
-    "【stock】个股/公司名/股票简称。必须是上市公司，非私有企业。"
-    "【fx】外汇货币对/汇率。必须是货币对,单币种需结合上下文。"
-    "【commodity】仅限传统大宗商品"
-    "【crypto】主流加密货币。"
-    "【index】金融市场指数：股指、债券指数等，非经济指标（如CPI）。"
-    "【etf】大型、流动性好的ETF，非小型专户产品。"
-    "【bond】国债、主要公司债，非私募债券。"))
+    "该资产于transcript的原文。"))
 
 field_instrument_normalized_deepseek = Field( ...,
     description=(
