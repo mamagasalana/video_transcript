@@ -83,10 +83,22 @@ class TradingSignal(BaseModel):
 
 field_id_deepseek = Field(..., ge=1, description="从1开始递增的分段编号")
 field_instrument_deepseek =  Field(..., min_length=1, 
-    description=(
-        "该资产于transcript的原文。"
-        "必须是明确是可交易资产。"
-    ))
+description=(
+    "该资产于transcript的原文。"
+    "必须是明确的可交易资产，需满足以下标准："
+    "1. 具有明确交易市场（交易所、交易平台）"
+    "2. 有足够流动性（非极冷门品种）"
+    "3. 标准化程度高（期货、主要股票等）"
+    
+    "分类标准与范围（严格遵循）："
+    "【stock】个股/公司名/股票简称。必须是上市公司，非私有企业。"
+    "【fx】外汇货币对/汇率。必须是货币对,单币种需结合上下文。"
+    "【commodity】仅限传统大宗商品"
+    "【crypto】主流加密货币。"
+    "【index】金融市场指数：股指、债券指数等，非经济指标（如CPI）。"
+    "【etf】大型、流动性好的ETF，非小型专户产品。"
+    "【bond】国债、主要公司债，非私募债券。"))
+
 field_instrument_normalized_deepseek = Field( ...,
     description=(
         "标准化后的可交易资产标识，用于对齐与检索（优先：ticker/合约代码/交易所符号；"
@@ -120,15 +132,16 @@ field_intent_deepseek = Field(...,
     "unclear: 仅提及/举例/对比/解释机制，或没有可落地的方向性建议。")
     )
 field_instrument_type_deepseek = Field(..., 
-    description=("instrument 的范围:"
-        "stock: 个股/公司名/股票简称（如“台积电”“英伟达”“苹果”）。"
-        "fx: 外汇货币对与汇率写法（如“美元/日元”“USDJPY”“人民币汇率”）。"
-        "commodity: 大宗商品与其基准（如“黄金”“原油”“WTI”“布伦特”）"
-        "crypto: 加密资产（如“比特币/BTC”“以太坊/ETH”）。"
-        "index: 指数与指数简称（如“标普500”“纳指”“道指”“沪深300”“美元指数”）,仅指“金融市场指数/可交易指数（或其衍生品所跟踪的指数。"
-        "etf: ETF/基金名称（如“SPY”“QQQ”“某某ETF”）。"
-        "bond: 债券/国债（如“美债”“国债”“公司债”）。"
-    ))
+    description='')
+    # description=("instrument 的范围:"
+    #     "stock: 个股/公司名/股票简称（如“台积电”“英伟达”“苹果”）。"
+    #     "fx: 外汇货币对与汇率写法（如“美元/日元”“USDJPY”“人民币汇率”）。"
+    #     "commodity: 大宗商品与其基准（如“黄金”“原油”“WTI”“布伦特”）,有标准化期货合约在主要交易所交易"
+    #     "crypto: 加密资产（如“比特币/BTC”“以太坊/ETH”）。"
+    #     "index: 指数与指数简称（如“标普500”“纳指”“道指”“沪深300”“美元指数”）,仅指“金融市场指数/可交易指数（或其衍生品所跟踪的指数。"
+    #     "etf: ETF/基金名称（如“SPY”“QQQ”“某某ETF”）。"
+    #     "bond: 债券/国债（如“美债”“国债”“公司债”）。"
+    # ))
 
 class TopicChunk_deepseek(BaseModel):
     chunk_id: int = field_id_deepseek

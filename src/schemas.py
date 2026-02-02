@@ -248,7 +248,6 @@ SCHEMA_VERSION=2026-01-31T22:54:00
 输出要求:
 1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次）。
 2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
-3) 去重合并：同一 instrument 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
-
-
+3) 专业修正：instrument_normalized 字段必须对明显的笔误/谐音/错别字进行专业修正。
+4) 智能去重：同一 instrument_normalized 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
 """
