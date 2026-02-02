@@ -15,7 +15,7 @@ def compile(glob_pattern):
     return ret
 
 
-compare = ['signal_with_instrument_openai', 'signal_with_instrument_deepseek' ]
+compare = ['signal_with_instrument_deepseek-reasoner', 'signal_with_instrument_deepseek' ]
 df1 = compile(f'outputs/model_output/{compare[0]}/*.json')
 df2 = compile(f'outputs/model_output/{compare[1]}/*.json')
 
