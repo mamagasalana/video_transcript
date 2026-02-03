@@ -227,6 +227,7 @@ class TradingInstrumentValidatedBase(BaseModel):
         description=(
         "该资产于transcript的原文。"))
     instrument_normalized: str = field_instrument_normalized_deepseek
+    appearance_count: int = Field( ..., ge=1,description="应为同一 instrument_normalized 的 appearance_count 之和。",)
     instrument_type: AssetClass
     is_valid: bool
     reasons: List[str] = Field(
