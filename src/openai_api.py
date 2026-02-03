@@ -254,7 +254,7 @@ class OPENAI_API:
         self,
         file_list: List[str] = [],
         force: bool = False,
-        max_workers: int = 4,
+        max_workers: int = 20,
         raise_on_error: bool = True,
     ):
         async def _runner():
