@@ -179,8 +179,11 @@ SCHEMA_INSTRUMENT_RULES_VALIDATE = r"""
 SCHEMA_VERSION=2026-02-03T13:01:00
 你是一个会中文(普通话)而且经验丰富的财经分析师。
 
+输入:
+- Transcript：内涵instruments
+
 目标:
-对已抽取的 instrument 逐条进行验证，判断其是否符合可交易资产标准。
+对已抽取的 instruments 逐条进行验证，判断其是否符合可交易资产标准。
 
 【强制验证与决策流程】
 在决定输出一个资产前，你必须进行以下逻辑验证：
@@ -204,7 +207,7 @@ SCHEMA_VERSION=2026-02-03T13:01:00
 【bond】债券。必须为公开交易、具有高信用评级和流动性的债券；私募债、非标资产、流动性极差的债券不予录取。
 
 验证要求:
-1) 覆盖性：所有在 instruments.instrument 中出现过的、都必须输出（每个 instrument 至少出现一次），不要因是否可交易而省略。
+1) 覆盖性：所有在 instruments.instrument 中出现过的，都必须被覆盖；如因智能去重合并为同一 instrument_normalized，则需通过 instrument_id_reference 显式包含被合并的 instrument_id。
 2) 可追溯：instrument 必须来自 instruments.instrument 的原文写法（精确抄写，不要改写/翻译/补全）。
 3) 专业修正：instrument_normalized 字段必须对明显的笔误/谐音/错别字进行专业修正。
 4) 智能去重：同一 instrument_normalized 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
@@ -228,6 +231,10 @@ class TradingInstrumentValidatedBase(BaseModel):
         "该资产于transcript的原文。"))
     instrument_normalized: str = field_instrument_normalized_deepseek
     appearance_count: int = Field( ..., ge=1,description="应为同一 instrument_normalized 的 appearance_count 之和。",)
+    instrument_id_reference: List[int] = Field(
+        default_factory=list,
+        description="该条目合并/覆盖的 instrument_id 列表；用于满足覆盖性要求，需包含被合并的全部 instrument_id。",
+    )
     instrument_type: AssetClass
     is_valid: bool
     reasons: List[str] = Field(
