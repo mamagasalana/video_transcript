@@ -169,6 +169,7 @@ field_instrument_deepseek =  Field(..., min_length=1, description=("该资产于
 class TradingInstrumentBase(BaseModel):
     instrument_id: int = field_id_deepseek
     instrument: str = field_instrument_deepseek
+    appearance_count: int = Field( ..., ge=1,description="该资产在逐字稿中出现的次数（中文说明）。",)
 
 class TradingInstrument(BaseModel):
     instruments: List[TradingInstrumentBase] = Field(default_factory=list)

@@ -12,7 +12,10 @@ import json
 from opencc import OpenCC
 from dotenv import load_dotenv
 from typing_extensions import override
+from typing import List
 import time
+import asyncio
+import nest_asyncio
 load_dotenv() 
 SEED  = 12345
 
@@ -189,6 +192,139 @@ class OPENAI_API:
                 break
             
             yield resp  # or yield resp.output_parsed, etc.
+
+    async def _process_one_file_async(
+        self,
+        transcript_file: str,
+        ustrack: UsageTracker,
+        usage_lock: asyncio.Lock,
+        force: bool,
+        semaphore: asyncio.Semaphore,
+    ):
+        async with semaphore:
+            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+            out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
+            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            if not force and os.path.exists(out_path):
+                return {"dt": dt, "skipped": True, "used": 0}
+
+            with open(transcript_file, 'r') as ifile:
+                transcript = ifile.read()
+
+            transcript2 = self.normalize_zh_transcript(transcript)
+
+            now = time.time()
+            resp = await asyncio.to_thread(self.get_json, transcript2)
+
+            try:
+                js, summary, used = self.extract_output(resp)
+            except Exception as exc:
+                print('error formatting? %s' % dt)
+                raise exc
+
+            with open(out_path, "w", encoding="utf-8") as ofile:
+                ofile.write(js)
+
+            with open(debug_path, 'w') as ofile:
+                ofile.writelines(summary)
+
+            async with usage_lock:
+                spent = ustrack.set(used)
+                try:
+                    ustrack.update_db(
+                        self.normalize_usage(
+                            resp,
+                            '%s/%s' % (self.OUTPUT_FOLDER, str(dt)),
+                            time.time() - now,
+                        )
+                    )
+                except Exception as exc:
+                    print('error parsing usage? %s' % dt)
+                    raise exc
+
+            return {
+                "dt": dt,
+                "skipped": False,
+                "used": used,
+                "spent": spent,
+                "resp": resp,
+            }
+
+    def run_batch_multiprocess(
+        self,
+        file_list: List[str] = [],
+        force: bool = False,
+        max_workers: int = 4,
+        raise_on_error: bool = True,
+    ):
+        async def _runner():
+            ustrack = UsageTracker(model=self.model, cap=TOKEN_CAP)
+
+            if file_list:
+                transcripts = sorted(file_list)
+            else:
+                transcripts = sorted(glob.glob('transcript2/*.txt'))
+
+            semaphore = asyncio.Semaphore(max_workers)
+            usage_lock = asyncio.Lock()
+
+            tasks = []
+            for transcript_file in transcripts:
+                dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+                out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
+                if not force and os.path.exists(out_path):
+                    continue
+                tasks.append(
+                    asyncio.create_task(
+                        self._process_one_file_async(
+                            transcript_file=transcript_file,
+                            ustrack=ustrack,
+                            usage_lock=usage_lock,
+                            force=force,
+                            semaphore=semaphore,
+                        )
+                    )
+                )
+
+            results = []
+            errors = []
+            pbar = tqdm(tasks, desc="Extracting", unit="doc")
+            for task in asyncio.as_completed(tasks):
+                try:
+                    result = await task
+                    results.append(result)
+                    pbar.update(1)
+                    pbar.set_postfix({
+                        "used": result.get("used", 0),
+                        "spent": result.get("spent", 0),
+                        "status": "skipped" if result.get("skipped") else "ok",
+                    })
+                except Exception as exc:
+                    errors.append(exc)
+                    pbar.update(1)
+                    pbar.set_postfix({"status": "error"})
+                    if raise_on_error:
+                        pbar.close()
+                        raise
+            pbar.close()
+
+            if errors and raise_on_error:
+                raise errors[0]
+
+            return results
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            nest_asyncio.apply(loop)
+            return loop.run_until_complete(_runner())
+
+        return asyncio.run(_runner())
+
+
 
     def run_batch_with_helper(self, glob_pattern: str=None, helper_folder: str=None, token_cap=TOKEN_CAP, force=False):
         """Get support from topic?
