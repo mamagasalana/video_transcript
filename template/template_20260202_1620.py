@@ -50,32 +50,9 @@ field_intent_deepseek = Field(
 )
 
 
-
-field_instrument_type_deepseek = Field(
-    ...,
-    description=(
-        "instrument的范围:\n"
-        "stock: 个股/公司名/股票简称（如'台积电''英伟达''苹果'）。\n"
-        "fx: 外汇货币对与汇率写法（如'美元/日元''USDJPY''人民币汇率'）。\n"
-        "commodity: 大宗商品与其基准（如'黄金''原油''WTI''布伦特'）。\n"
-        "crypto: 加密资产（如'比特币/BTC''以太坊/ETH'）。\n"
-        "index: 指数与指数简称（如'标普500''纳指''道指''沪深300''美元指数'）。\n"
-        "etf: ETF/基金名称（如'SPY''QQQ''某某ETF'）。\n"
-        "bond: 债券/国债（如'美债''国债''公司债'）。\n"
-    )
-)
-
-field_instrument_from_helper_deepseek = Field(
-    ...,
-    min_length=1,
-    description=("来自helper.instruments.instrument，精确拷贝")
-)
-
-field_instrument_normalized_from_helper_deepseek = Field(
-    ...,
-    description=("来自helper.instruments.instrument_normalized，直接沿用")
-)
-
+field_instrument_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument，直接沿用") )
+field_instrument_normalized_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument_normalized，直接沿用"))
+field_instrument_type_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument_type，直接沿用"))
 
 class EvidenceSpan_deepseek4(BaseModel):
     evidence_id: int = field_id_deepseek
@@ -138,7 +115,7 @@ class TradingSignalBase_deepseek4(BaseModel):
     intent: Intent = field_intent_deepseek
     trading_window: TradingWindow = field_trading_window
     evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
-    instrument_type: AssetClass = field_instrument_type_deepseek
+    instrument_type: AssetClass = field_instrument_type_from_helper_deepseek
 
 class TRADING_SIGNAL(BaseModel):
     evidence: List[EvidenceSpan_deepseek4] = Field(default_factory=list)
@@ -174,35 +151,88 @@ SCHEMA_VERSION=2026-02-01T10:00:00
 """
 
 
-SCHEMA_INSTRUMENT_RULES = r"""
-SCHEMA_VERSION=2026-02-03T12:30:00
+SCHEMA_INSTRUMENT_RULES_EXTRACT = r"""
+SCHEMA_VERSION=2026-02-03T13:00:00
 你是一个会中文(普通话)而且经验丰富的财经分析师。
 
 目标:
-从Transcript中识别并抽取所有被提及的可交易资产(instrument)，需满足以下标准：
-1. 具有明确、公开、中心化的交易市场（如交易所、受监管的交易平台）。
-2. 有足够流动性（非极冷门品种）。
-3. 标准化程度高（期货、主要股票、主流ETF/债券等）。
-4. 核心修订原则：当识别一个工具时，你必须能联想到其至少一个具体的、活跃的交易市场或标准化产品。否则，它就不是目标工具。
+从Transcript中识别并抽取所有被提及的资产/标的名称(instrument)，尽量完整收集，不要过滤或主观排除。
 
-分类标准与范围（严格遵循，并增加否决条款）：
-【stock】个股/公司名/股票简称。 必须是在主要证券交易所上市的公司股票。私有企业、仅场外交易的股票不予录取。
-【fx】外汇货币/汇率。
-【commodity】仅限传统大宗商品,如非传统大宗商品则不予录取;
-【crypto】主流加密货币,如非主流则不予录取;。
-【index】金融市场指数。必须是拥有相关场内衍生品或高流动性ETF的金融市场指数。如果Transcript中提到某个市场的泛指，你可以将其对应到该市场最具代表性、流动性最高的基准指数，前提是该基准指数符合上述条件。
-【etf】交易所交易基金。 必须是在证券交易所上市、规模大、流动性好的ETF。小型或流动性差的ETF产品不予录取。
-【bond】债券。 必须是在债券市场或交易所公开交易、具有高信用评级和流动性的债券，主要指国债、主要政策性金融债和投资级公司债。私募债券、非标资产、流动性极差的债券不予录取。
+输出要求:
+1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次），不要因是否可交易而省略。
+2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
+"""
+
+field_instrument_deepseek =  Field(..., min_length=1, description=("该资产于transcript的原文。"))
+
+# to standardize signal instrument for future comparison purpose
+class TradingInstrumentBase(BaseModel):
+    instrument_id: int = field_id_deepseek
+    instrument: str = field_instrument_deepseek
+
+class TradingInstrument(BaseModel):
+    instruments: List[TradingInstrumentBase] = Field(default_factory=list)
+
+
+SCHEMA_INSTRUMENT_RULES_VALIDATE = r"""
+SCHEMA_VERSION=2026-02-03T13:01:00
+你是一个会中文(普通话)而且经验丰富的财经分析师。
+
+目标:
+对已抽取的 instrument 逐条进行验证，判断其是否符合可交易资产标准。
 
 【强制验证与决策流程】
 在决定输出一个资产前，你必须进行以下逻辑验证：
 市场联想测试： 提到这个工具时，你是否能立刻想到一个具体的交易所名称或一个具体的交易产品代码？如果不能，它很可能不可交易。
-类别否决检查： 对照上述每个类别的否决条款，检查该工具是否属于被明确排除的类型。
+类别否决检查： 对照各类别的否决条款，检查该工具是否属于被明确排除的类型。
 最终判断： 只有通过以上测试的工具才符合输出条件。如果存疑，优先排除。
 
-输出要求:
-1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次）。
-2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
+验证标准与范围（必须严格遵循，宁可错杀不要漏放）：
+1) 具有明确、公开、中心化的交易市场（如交易所、受监管的交易平台）。
+2) 有足够流动性（非极冷门品种）。
+3) 标准化程度高（期货、主要股票、主流ETF/债券等）。
+4) 核心修订原则：当识别一个工具时，你必须能联想到其至少一个具体的、活跃的交易市场或标准化产品。否则，判为不合格。
+
+分类标准与否决条款（严格执行）：
+【stock】个股/公司名/股票简称。必须是在主要证券交易所上市的公司股票。私有企业、仅场外交易的股票不予录取。
+【fx】外汇货币/汇率。非公开可交易的内部报价或非标准写法不予录取。
+【commodity】仅限传统大宗商品；非传统大宗商品不予录取。
+【crypto】仅限主流加密货币；非主流加密货币不予录取。
+【index】金融市场指数。必须拥有场内衍生品或高流动性ETF的指数。若仅为泛指市场概念，且无法对应到主流基准指数，则不予录取。
+【etf】交易所交易基金。必须为上市、规模大、流动性好的ETF；小型或流动性差的ETF不予录取。
+【bond】债券。必须为公开交易、具有高信用评级和流动性的债券；私募债、非标资产、流动性极差的债券不予录取。
+
+验证要求:
+1) 覆盖性：所有在 instruments.instrument 中出现过的、都必须输出（每个 instrument 至少出现一次），不要因是否可交易而省略。
+2) 可追溯：instrument 必须来自 instruments.instrument 的原文写法（精确抄写，不要改写/翻译/补全）。
 3) 专业修正：instrument_normalized 字段必须对明显的笔误/谐音/错别字进行专业修正。
 4) 智能去重：同一 instrument_normalized 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
 """
+
+
+field_instrument_normalized_deepseek = Field( ...,
+    description=(
+        "标准化后的可交易资产标识，用于对齐与检索（优先：ticker/合约代码/交易所符号；"
+        "其次：官方全称；再次：常用英文名/缩写）。"
+        "当原文疑似笔误/谐音/错别字时，可给出你认为最可能的标准名称，但不得凭空引入原文之外的新标的。"
+        "本字段不得为空：若无法可靠标准化，则 instrument_normalized 必须等于原文 instrument（原样拷贝）。"
+        "目标：输出最具代表性的、可交易的标准化资产。"
+    ))
+
+
+class TradingInstrumentValidatedBase(BaseModel):
+    instrument_id: int = field_id_deepseek
+    instrument: str =  Field(..., min_length=1, 
+        description=(
+        "该资产于transcript的原文。"))
+    instrument_normalized: str = field_instrument_normalized_deepseek
+    instrument_type: AssetClass
+    is_valid: bool
+    reasons: List[str] = Field(
+        default_factory=list,
+        description="失败原因列表（若 is_valid=true，则可为空列表）。",
+    )
+
+
+class TradingInstrumentValidated(BaseModel):
+    instruments: List[TradingInstrumentValidatedBase] = Field(default_factory=list)
