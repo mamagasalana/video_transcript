@@ -107,6 +107,7 @@ class AssetClass(str, Enum):
     INDEX = "index"
     ETF = "etf"
     BOND = "bond"
+    INVALID = "invalid"
 
 class TradingSignalBase_deepseek4(BaseModel):
     signal_id: int = field_id_deepseek
@@ -161,6 +162,7 @@ SCHEMA_VERSION=2026-02-03T13:00:00
 输出要求:
 1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次），不要因是否可交易而省略。
 2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
+3) 允许多条：同一可交易资产若在原文中有不同写法，应分别输出为独立条目。
 """
 
 field_instrument_deepseek =  Field(..., min_length=1, description=("该资产于transcript的原文。"))
@@ -235,7 +237,13 @@ class TradingInstrumentValidatedBase(BaseModel):
         default_factory=list,
         description="该条目合并/覆盖的 instrument_id 列表；用于满足覆盖性要求，需包含被合并的全部 instrument_id。",
     )
-    instrument_type: AssetClass
+    instrument_type: AssetClass = Field(
+        ...,
+        description=(
+            "当 is_valid=false 时，instrument_type 必须为 invalid；"
+            "当 is_valid=true 时，必须为有效资产类别之一（stock/fx/commodity/crypto/index/etf/bond）。"
+        ),
+    )
     is_valid: bool
     reasons: List[str] = Field(
         default_factory=list,
