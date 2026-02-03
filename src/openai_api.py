@@ -12,7 +12,7 @@ import json
 from opencc import OpenCC
 from dotenv import load_dotenv
 from typing_extensions import override
-
+import time
 load_dotenv() 
 SEED  = 12345
 
@@ -112,7 +112,7 @@ class OPENAI_API:
         used = resp.usage.total_tokens
         return js, summary, used
 
-    def normalize_usage(self, resp, filename ):
+    def normalize_usage(self, resp, filename , time_spent):
         usage = resp.usage.to_dict()
         return {
             "provider": self.model,
@@ -123,6 +123,7 @@ class OPENAI_API:
             "reasoning_tokens": usage.get("output_tokens_details", {}).get("reasoning_tokens", 0),
             "cached_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
+            'time_spent': time_spent,
         }
 
     def run_batch(self, glob_pattern=None, token_cap=TOKEN_CAP, force=False):
@@ -152,6 +153,7 @@ class OPENAI_API:
 
             transcript2 = self.normalize_zh_transcript(transcript)
             
+            now = time.time()
             resp = self.get_json(transcript2)
 
             try:
@@ -170,7 +172,7 @@ class OPENAI_API:
             spent = ustrack.set(used)
 
             try:
-                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) ))
+                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) , time.time() - now))
             except:
                 print('error parsing usage? %s' % dt)
                 yield resp
@@ -228,7 +230,8 @@ class OPENAI_API:
 
             with open(support_file[0], 'r') as ifile:
                 support= ifile.read()
-
+            
+            now = time.time()
             resp = self.get_json2(transcript2, support)
 
             try:
@@ -247,7 +250,7 @@ class OPENAI_API:
             spent = ustrack.set(used)
 
             try:
-                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) ))
+                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) , time.time() - now))
             except:
                 print('error parsing usage? %s' % dt)
                 yield resp
@@ -336,7 +339,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
         return js2, summary, used
     
     @override
-    def normalize_usage(self, resp, filename):
+    def normalize_usage(self, resp, filename , time_spent):
         usage = resp.usage.to_dict()
         return {
             "provider": "deepseek",
@@ -347,6 +350,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             "reasoning_tokens": usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0),
             "cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens", 0),
             "total_tokens": usage.get("total_tokens", 0),
+            'time_spent': time_spent,
         }
     
 if __name__ == "__main__":

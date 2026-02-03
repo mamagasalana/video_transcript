@@ -33,6 +33,7 @@ class UsageTracker:
                 reasoning_tokens INTEGER,
                 cached_tokens INTEGER,
                 total_tokens INTEGER NOT NULL,
+                time_spent REAL NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
             """)
@@ -44,8 +45,8 @@ class UsageTracker:
                 provider, model, filename, 
                 prompt_tokens, completion_tokens,
                 reasoning_tokens, cached_tokens,
-                total_tokens
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                total_tokens, time_spent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 u["provider"],
                 u["model"],
@@ -55,6 +56,7 @@ class UsageTracker:
                 u["reasoning_tokens"],
                 u["cached_tokens"],
                 u["total_tokens"],
+                u["time_spent"],
             ))
 
     def extract_db(self, qry="SELECT * FROM llm_usage"):
