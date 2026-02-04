@@ -92,7 +92,7 @@ class OPENAI_API:
         model="gpt-5-nano",
         input=[
             {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
-            {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>\n\Helper:\n<<<\n{helper}\n>>>"}]}
+            {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>\nHelper:\n<<<\n{helper}\n>>>"}]}
             ],
         text_format=self.template,
         text={"verbosity":"low"},
@@ -435,7 +435,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             model=self.model,
             messages=[
                 {"role": "system", "content": self.schema},
-                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\n\Helper:\n<<<\n{helper}\n>>>"},
+                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\nHelper:\n<<<\n{helper}\n>>>"},
             ],
             timeout= 300,
             seed=SEED,

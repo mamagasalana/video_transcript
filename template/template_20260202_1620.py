@@ -160,18 +160,25 @@ SCHEMA_VERSION=2026-02-03T13:00:00
 从Transcript中识别并抽取所有被提及的资产/标的名称(instrument)，尽量完整收集，不要过滤或主观排除。
 
 输出要求:
-1) 覆盖性：所有在 Transcript 中出现过的、可识别的 instrument 都必须输出（每个 instrument 至少出现一次），不要因是否可交易而省略。
-2) 可追溯：instrument 必须来自 Transcript 的原文写法（精确抄写，不要改写/翻译/补全）。
-3) 允许多条：同一可交易资产若在原文中有不同写法，应分别输出为独立条目。
+1) 连续子串：instruments 中的每个字符串必须是 Transcript 中真实出现过的【连续子串】（完全匹配原文，包含大小写与符号）。
+   - 禁止改写/翻译/补全。
+   - 禁止把“负收益的债权”改成“负收益债券”这类不在原文里的写法。
+3) 去重：完全相同的字符串只输出一次。
+4) 禁止合并：不得把多个资产/标的合并为一个字符串。
+   - 若字幕/ASR 发生粘连（例如“亚马逊苹果”这种紧挨着的并列资产名），必须拆分为多个条目分别输出（如“亚马逊”、“苹果”）。
+5) 边界控制：instrument 应是“标的名称”本身，不要把无关上下文一起带上。
+   - ✅ 例：\"台北股市\"、\"纽约金的期货\"、\"伦敦金的现货\"
+   - ❌ 例：\"台北股市涨到三万三\"、\"纽约金的期货竟然跟伦敦金的现货\"
 """
 
-field_instrument_deepseek =  Field(..., min_length=1, description=("该资产于transcript的原文。"))
 
 # to standardize signal instrument for future comparison purpose
 class TradingInstrumentBase(BaseModel):
     instrument_id: int = field_id_deepseek
-    instrument: str = field_instrument_deepseek
-    appearance_count: int = Field( ..., ge=1,description="该资产在逐字稿中出现的次数（中文说明）。",)
+    instrument: str =   Field(
+        min_length=1,
+        description="必须来自 Transcript 的连续子串（精确抄写），不得改写/翻译/补全；不得包含前后空格。",
+    ),
 
 class TradingInstrument(BaseModel):
     instruments: List[TradingInstrumentBase] = Field(default_factory=list)
