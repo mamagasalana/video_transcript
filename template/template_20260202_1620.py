@@ -153,32 +153,28 @@ SCHEMA_VERSION=2026-02-01T10:00:00
 
 
 SCHEMA_INSTRUMENT_RULES_EXTRACT = r"""
-SCHEMA_VERSION=2026-02-03T13:00:00
+SCHEMA_VERSION=2026-02-06T00:00:00
 你是一个会中文(普通话)而且经验丰富的财经分析师。
 
 目标:
-从Transcript中识别并抽取所有被提及的资产/标的名称(instrument)，尽量完整收集，不要过滤或主观排除。
+从 Transcript 中抽取所有被提及的「潜在金融交易标的」名称(instrument)。
+只抽取金融标的（股票/公司/ETF/指数/期货/现货/合约/加密货币/外汇/商品/市场或资产类别等），
+不要抽取经济指标或估值指标（如利率/收益率/殖利率/本益比/估值/CPI/M2 等）。
 
-输出要求:
-1) 连续子串：instruments 中的每个字符串必须是 Transcript 中真实出现过的【连续子串】（完全匹配原文，包含大小写与符号）。
-   - 禁止改写/翻译/补全。
-   - 禁止把“负收益的债权”改成“负收益债券”这类不在原文里的写法。
-3) 去重：完全相同的字符串只输出一次。
-4) 禁止合并：不得把多个资产/标的合并为一个字符串。
-   - 若字幕/ASR 发生粘连（例如“亚马逊苹果”这种紧挨着的并列资产名），必须拆分为多个条目分别输出（如“亚马逊”、“苹果”）。
-5) 边界控制：instrument 应是“标的名称”本身，不要把无关上下文一起带上。
-   - ✅ 例：\"台北股市\"、\"纽约金的期货\"、\"伦敦金的现货\"
-   - ❌ 例：\"台北股市涨到三万三\"、\"纽约金的期货竟然跟伦敦金的现货\"
+抽取规则:
+1) 仅可输出 Transcript 中真实出现过的【连续子串】（完全匹配原文，包含大小写与符号）。
+2) 输出列表去重：完全相同的字符串只输出一次。
+3) 不要输出人名/地名/机构名/事件名/叙事名，除非其本身就是金融标的名称。
+4) 当出现“<资产> + 指标词/价格/表现/涨跌”结构时，只抽取资产名称本身，不要把指标词带入。
 """
 
 
 # to standardize signal instrument for future comparison purpose
 class TradingInstrumentBase(BaseModel):
     instrument_id: int = field_id_deepseek
-    instrument: str =   Field(
-        min_length=1,
-        description="必须来自 Transcript 的连续子串（精确抄写），不得改写/翻译/补全；不得包含前后空格。",
-    ),
+    instrument: str = Field(..., min_length=1,
+        description="必须来自 Transcript 的连续子串（精确抄写），不得改写/翻译/补全；不得包含前后空格；只包含标的名称本身，必要时可从更长黏连片段中裁剪出标的名称（仍需连续子串）。",
+    )
 
 class TradingInstrument(BaseModel):
     instruments: List[TradingInstrumentBase] = Field(default_factory=list)

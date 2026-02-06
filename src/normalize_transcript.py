@@ -1,10 +1,15 @@
 from typing import List, Tuple
 import textwrap
 from collections import Counter
+import re
+from opencc import OpenCC
 
+to_simplified = OpenCC("t2s") 
 
 class NormFinder:
     def __init__(self, raw: str):
+        if not raw:
+            return
         self.raw = raw
         self.norm, self.norm2raw_list = self._normalize_with_map(raw)
         self.norm2raw = {idx: v for idx, v in enumerate(self.norm2raw_list)}
@@ -70,3 +75,29 @@ class NormFinder:
                 'win_vote' : votes ,
                  'total_vote' : len(implied_starts), 
                  'extra_debug': c}
+
+
+    def normalize_zh_transcript(self, text: str) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
+
+        lines = [ln.strip() for ln in text.split("\n")]
+        out = []
+        for ln in lines:
+            if not ln:
+                out.append("")  
+                continue
+            if not out or out[-1] == "":
+                out.append(ln)
+                continue
+
+            
+            if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
+                out[-1] = out[-1] + " " + ln
+            else:
+                out.append(ln)
+
+        text2 = "\n".join(out)
+        # text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
+        text2 = re.sub(r'\s+', ' ', text2).strip()
+        return to_simplified.convert(text2)

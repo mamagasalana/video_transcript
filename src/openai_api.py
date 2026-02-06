@@ -2,6 +2,7 @@ from openai import OpenAI
 from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
 from src.openai_usage_tracker import TOKEN_CAP, UsageTracker
+from src.normalize_transcript import NormFinder
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -9,7 +10,7 @@ import glob
 import re
 import os
 import json
-from opencc import OpenCC
+
 from dotenv import load_dotenv
 from typing_extensions import override
 from typing import List
@@ -19,13 +20,14 @@ import nest_asyncio
 load_dotenv() 
 SEED  = 12345
 
-to_simplified = OpenCC("t2s") 
+nf = NormFinder('')
 
 class OPENAI_API:
     def __init__(self, pydantic_template: BaseModel, 
                  output_folder:str, 
                  schema: str, 
-                 model:str= 'openai'):
+                 model:str= 'openai',
+                 temperature:float=1.0):
         """Initialize the extractor.
 
         Args:
@@ -36,36 +38,12 @@ class OPENAI_API:
         self.schema = schema
         self.model = model
         self.template = pydantic_template
+        self.temperature = temperature
         self.OUTPUT_FOLDER= os.path.join('outputs/model_output', '%s_%s' % (output_folder, self.model))
         self.DEBUG_PATH = os.path.join('outputs/reasoning', 'debug_%s_%s' % (output_folder, self.model))
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
         os.makedirs(self.DEBUG_PATH, exist_ok=True)
         self.client = OpenAI()
-
-    def normalize_zh_transcript(self, text: str) -> str:
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
-
-        lines = [ln.strip() for ln in text.split("\n")]
-        out = []
-        for ln in lines:
-            if not ln:
-                out.append("")  
-                continue
-            if not out or out[-1] == "":
-                out.append(ln)
-                continue
-
-            
-            if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
-                out[-1] = out[-1] + " " + ln
-            else:
-                out.append(ln)
-
-        text2 = "\n".join(out)
-        # text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
-        text2 = re.sub(r'\s+', ' ', text2).strip()
-        return to_simplified.convert(text2)
 
     def get_json(self, transcript):
         resp =  self.client.responses.parse(
@@ -81,6 +59,7 @@ class OPENAI_API:
         store=True,
         include=[
         ],
+        temperature=self.temperature,
         timeout= 300,
         # max_output_tokens=1000
         )
@@ -102,6 +81,7 @@ class OPENAI_API:
         include=[
         ],
         timeout= 300,
+        temperature=self.temperature,
         # max_output_tokens=1000
         )
         
@@ -145,7 +125,7 @@ class OPENAI_API:
                 pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
                 break
             
-            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+            dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
             debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
             if not force and os.path.exists(out_path):
@@ -154,7 +134,7 @@ class OPENAI_API:
             with open(transcript_file, 'r') as ifile:
                 transcript = ifile.read()
 
-            transcript2 = self.normalize_zh_transcript(transcript)
+            transcript2 = nf.normalize_zh_transcript(transcript)
             
             now = time.time()
             resp = self.get_json(transcript2)
@@ -202,7 +182,7 @@ class OPENAI_API:
         semaphore: asyncio.Semaphore,
     ):
         async with semaphore:
-            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+            dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
             debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
             if not force and os.path.exists(out_path):
@@ -211,7 +191,7 @@ class OPENAI_API:
             with open(transcript_file, 'r') as ifile:
                 transcript = ifile.read()
 
-            transcript2 = self.normalize_zh_transcript(transcript)
+            transcript2 = nf.normalize_zh_transcript(transcript)
 
             now = time.time()
             resp = await asyncio.to_thread(self.get_json, transcript2)
@@ -270,7 +250,7 @@ class OPENAI_API:
 
             tasks = []
             for transcript_file in transcripts:
-                dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+                dt = os.path.basename(transcript_file).split('.')[0]
                 out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
                 if not force and os.path.exists(out_path):
                     continue
@@ -350,7 +330,7 @@ class OPENAI_API:
                 pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
                 break
             
-            dt = re.findall(r'\d+', os.path.basename(transcript_file))[0]
+            dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
             debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
             if not force and os.path.exists(out_path):
@@ -359,7 +339,7 @@ class OPENAI_API:
             with open(transcript_file, 'r') as ifile:
                 transcript = ifile.read()
 
-            transcript2 = self.normalize_zh_transcript(transcript)
+            transcript2 = nf.normalize_zh_transcript(transcript)
 
             support_file = glob.glob(os.path.join('outputs/model_output', helper_folder, f'{dt}*'))
             assert support_file, "Support file not found"
@@ -406,12 +386,13 @@ class OPENAI_API:
 
 
 class OPENAI_API_DEEPSEEK(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, model: str="deepseek-reasoner"):
+    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, model: str="deepseek-reasoner", temperature: float=1.0):
         super().__init__(
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
-            model=model
+            model=model,
+            temperature=temperature
         )
         self.schema = f"""
 {schema}
@@ -437,9 +418,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
                 {"role": "system", "content": self.schema},
                 {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\nHelper:\n<<<\n{helper}\n>>>"},
             ],
-            timeout= 300,
-            seed=SEED,
-            # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
+            temperature=self.temperature,
         )
         return resp
              
@@ -451,9 +430,7 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
                 {"role": "system", "content": self.schema},
                 {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>"},
             ],
-            timeout= 300,
-            seed=SEED,
-            # response_format={"type": "json_object"},  # force JSON object (if provider supports it)
+            temperature=self.temperature,
         )
         return resp
 

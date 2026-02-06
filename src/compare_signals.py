@@ -7,7 +7,7 @@ import os
 def compile_signals(glob_pattern):
     dfs =[]
     for f in glob.glob(glob_pattern):
-        dt = re.findall(r'\d+', os.path.basename(f))[0]
+        dt = os.path.basename(f).split('.')[0]
         df  =pd.DataFrame(json.load(open(f, 'r'))['signals'])
         df['dt'] =dt
         dfs.append(df)
@@ -17,7 +17,7 @@ def compile_signals(glob_pattern):
 def compile_instruments(glob_pattern):
     dfs =[]
     for f in glob.glob(glob_pattern):
-        dt = re.findall(r'\d+', os.path.basename(f))[0]
+        dt = os.path.basename(f).split('.')[0]
         df  =pd.DataFrame(json.load(open(f, 'r'))['instruments'])
         df['dt'] =dt
         dfs.append(df)
