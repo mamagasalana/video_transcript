@@ -77,7 +77,7 @@ class LLAMA_CPP_API:
             {"role": "user", "content": user_text},
         ]
 
-    def get_json(self, transcript: str):
+    def get_json(self, transcript: str, **gen_kwargs):
         messages = self._build_messages(transcript)
         prompt = self._schema_prompt() + "\n\n" + messages[-1]["content"]
         return self.llm(
@@ -85,6 +85,7 @@ class LLAMA_CPP_API:
             temperature=self.temperature,
             max_tokens=MAX_TOKENS,
             stop=STOP,
+            **gen_kwargs,
         )
 
     
@@ -117,7 +118,7 @@ class LLAMA_CPP_API:
         js = json.dumps(payload, indent=2, ensure_ascii=False)
         return js, summary
 
-    def run_batch(self, transcripts: List, force: bool = False):
+    def run_batch(self, transcripts: List, force: bool = False, max_retries: int = 5):
 
         for transcript_file in tqdm(transcripts):
 
@@ -131,14 +132,27 @@ class LLAMA_CPP_API:
                 transcript = ifile.read()
 
             transcript2 = nf.normalize_zh_transcript(transcript)
-            resp = self.get_json(transcript2)
-
-            try:
-                js, summary = self.extract_output(resp)
-            except Exception as exc:
-                print(f"error formatting? {dt}")
-                yield resp
-                raise exc
+            resp = None
+            attempt = 0
+            while True:
+                try:
+                    gen_kwargs = {}
+                    if attempt > 0:
+                        gen_kwargs = {
+                            "repeat_penalty": 1.1 + 0.05 * attempt,
+                            "frequency_penalty": 0.1 * attempt,
+                            "presence_penalty": 0.05 * attempt,
+                        }
+                    resp = self.get_json(transcript2, **gen_kwargs)
+                    js, summary = self.extract_output(resp)
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    print(f"error formatting? {dt} (attempt {attempt}/{max_retries + 1})")
+                    if resp is not None:
+                        yield resp
+                    if attempt > max_retries:
+                        raise exc
 
             with open(out_path, "w", encoding="utf-8") as ofile:
                 ofile.write(js)
