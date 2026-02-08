@@ -12,3 +12,4 @@ usage.db
 *.txt_
 *.json_
 
+*.parquet
