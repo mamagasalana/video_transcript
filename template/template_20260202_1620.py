@@ -105,7 +105,6 @@ class AssetClass(str, Enum):
     COMMODITY = "commodity"
     CRYPTO = "crypto"
     INDEX = "index"
-    ETF = "etf"
     BOND = "bond"
     INVALID = "invalid"
 
@@ -242,7 +241,7 @@ SCHEMA_VERSION=2026-02-03T13:01:00
 验证标准与范围（必须严格遵循，宁可错杀不要漏放）：
 1) 具有明确、公开、中心化的交易市场（如交易所、受监管的交易平台）。
 2) 有足够流动性（非极冷门品种）。
-3) 标准化程度高（期货、主要股票、主流ETF/债券等）。
+3) 标准化程度高（期货、主要股票、主流债券等）。
 4) 核心修订原则：当识别一个工具时，你必须能联想到其至少一个具体的、活跃的交易市场或标准化产品。否则，判为不合格。
 
 分类标准与否决条款（严格执行）：
@@ -250,8 +249,7 @@ SCHEMA_VERSION=2026-02-03T13:01:00
 【fx】外汇货币/汇率。非公开可交易的内部报价或非标准写法不予录取。
 【commodity】仅限传统大宗商品；非传统大宗商品不予录取。
 【crypto】仅限主流加密货币；非主流加密货币不予录取。
-【index】金融市场指数。必须拥有场内衍生品或高流动性ETF的指数。若仅为泛指市场概念，且无法对应到主流基准指数，则不予录取。
-【etf】交易所交易基金。必须为上市、规模大、流动性好的ETF；小型或流动性差的ETF不予录取。
+【index】金融市场指数。必须拥有场内衍生品的指数。若仅为泛指市场概念，且无法对应到主流基准指数，则不予录取。
 【bond】债券。必须为公开交易、具有高信用评级和流动性的债券；私募债、非标资产、流动性极差的债券不予录取。
 
 验证要求:
@@ -287,7 +285,7 @@ class TradingInstrumentValidatedBase(BaseModel):
         ...,
         description=(
             "当 is_valid=false 时，instrument_type 必须为 invalid；"
-            "当 is_valid=true 时，必须为有效资产类别之一（stock/fx/commodity/crypto/index/etf/bond）。"
+            "当 is_valid=true 时，必须为有效资产类别之一（stock/fx/commodity/crypto/index/bond）。"
         ),
     )
     is_valid: bool
