@@ -59,6 +59,9 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
         if head:
             continue
 
+    if os.path.exists(f'transcript2/{dt}.txt'):
+        os.remove(f'transcript2/{dt}.txt')
+        
     file_start = time.perf_counter()   # tic for this file
     print("Transcribing %s ... this may take a while." % dt)
     
