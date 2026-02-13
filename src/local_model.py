@@ -8,6 +8,7 @@ import time
 import glob
 from typing import List, Optional
 
+from src.openai_schema_tracker import FolderSchemaTracker
 from src.normalize_transcript import NormFinder
 from llama_cpp import Llama
 from pydantic import BaseModel
@@ -52,6 +53,7 @@ class LLAMA_CPP_API:
             seed=SEED,
             verbose=False,
         )
+        FolderSchemaTracker().set(folder=output_folder, model=self.model, schema=self.schema)
         print(f"done loading model, time taken: {time.time() - start:.2f}")
 
     def _schema_prompt(self) -> str:

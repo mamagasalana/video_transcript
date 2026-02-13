@@ -2,6 +2,7 @@ from openai import OpenAI
 from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 
 from src.openai_usage_tracker import TOKEN_CAP, UsageTracker
+from src.openai_schema_tracker import FolderSchemaTracker
 from src.normalize_transcript import NormFinder
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -43,6 +44,7 @@ class OPENAI_API:
         self.DEBUG_PATH = os.path.join('outputs/reasoning', 'debug_%s_%s' % (output_folder, self.model))
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
         os.makedirs(self.DEBUG_PATH, exist_ok=True)
+        FolderSchemaTracker().set(folder=output_folder, model=self.model, schema=self.schema)
         self.client = OpenAI()
 
     def get_json(self, transcript):
