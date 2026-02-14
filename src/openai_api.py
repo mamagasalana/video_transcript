@@ -129,7 +129,7 @@ class OPENAI_API:
             
             dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
             if not force and os.path.exists(out_path):
                 continue
 
@@ -186,7 +186,7 @@ class OPENAI_API:
         async with semaphore:
             dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
             if not force and os.path.exists(out_path):
                 return {"dt": dt, "skipped": True, "used": 0}
 
@@ -334,7 +334,7 @@ class OPENAI_API:
             
             dt = os.path.basename(transcript_file).split('.')[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
             if not force and os.path.exists(out_path):
                 continue
 

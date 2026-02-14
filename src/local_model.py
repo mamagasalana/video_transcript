@@ -126,7 +126,7 @@ class LLAMA_CPP_API:
 
             dt = os.path.basename(transcript_file).split(".")[0]
             out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"{dt}.txt")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
             if not force and os.path.exists(out_path):
                 continue
 
