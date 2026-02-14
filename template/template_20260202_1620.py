@@ -200,7 +200,9 @@ SCHEMA_VERSION=2026-02-13T00:00:00
    - 目标：最大化保留 Transcript 原文表述，用于可追溯。
 2) instrument_normalized（标准化标的）：
    - 用于检索/对齐：优先 ticker/交易所符号；其次官方全称；再次常用英文名/缩写。
-   - 【日期信息一律剔除】若原文标的带有任何“日历日期/时间/交割月/年份/到期日/合约代码”等日期信息（例如“黄金2406”“CLZ4”“WTI 2024年12月”“美债2033年到期”），instrument_normalized 必须剔除这些日期信息，只保留“标的本体/基准标的”（如“Gold”“WTI Crude Oil”“US Treasury”）。
+   - 【剔除到期/交割日期，但保留期限】若原文标的包含任何“到期/交割”等日历日期信息（年月日/具体时间等）或期货合约的月份/年份/代码（例如“黄金2406”“CLZ4”“WTI 2024年12月合约”“美债10年期 2024年12月到期”），instrument_normalized 必须剔除这些“到期/交割日期”信息，只保留“标的本体/基准标的”。
+     - 例：instrument="黄金2406" → instrument_normalized="Gold"；instrument="WTI 2024年12月合约" → instrument_normalized="WTI Crude Oil"。
+     - 【期限保留规则】若原文包含“期限/久期/年期/tenor”（如“2年期/10年期/30年期/10Y/10yr”），该期限信息属于“标的本体”，必须保留；需要剔除的是“到期/交割日期”。例如 instrument="美债10年期 2024年12月到期" 时，instrument_normalized 应为 "US 10Y Treasury"（而不是 "US Treasury"）。
      - 注意：不要误删本身就是 ticker/交易所符号的一部分的数字（例如股票代码/指数代码/外汇符号中的数字或点号等）。
    - 当原文疑似笔误/谐音/错别字时，可给出最可能的标准名称，但不得凭空引入原文之外的新标的。
    - 若无法可靠标准化，则 instrument_normalized 必须等于 instrument（原样拷贝）。
@@ -252,8 +254,9 @@ field_instrument_normalized_deepseek = Field( ...,
     description=(
         "标准化后的可交易资产标识，用于对齐与检索（一般优先：ticker/交易所符号；"
         "其次：官方全称；再次：常用英文名/缩写）。"
-        "【日期信息一律剔除】若 instrument 原文包含任何“日历日期/时间/交割月/年份/到期日/合约代码”等日期信息（如“黄金2406”“CLZ4”“WTI 2024年12月合约”“美债2033年到期”），"
-        "instrument_normalized 必须剔除这些日期信息，只保留“标的本体/基准标的”（如“Gold”“WTI Crude Oil”“US Treasury”）。"
+        "【剔除到期/交割日期，但保留期限】若 instrument 原文包含任何“到期/交割”等日历日期信息（年月日/具体时间等）或期货合约的月份/年份/代码（如“黄金2406”“CLZ4”“WTI 2024年12月合约”“美债10年期 2024年12月到期”），"
+        "instrument_normalized 必须剔除这些“到期/交割日期”信息，只保留“标的本体/基准标的”（如“Gold”“WTI Crude Oil”）。"
+        "【期限保留规则】若原文包含“期限/久期/年期/tenor”（如“2年期/10年期/30年期/10Y/10yr”），该期限信息属于“标的本体”，必须保留；需要剔除的是“到期/交割日期”。例如 instrument='美债10年期 2024年12月到期' 时，instrument_normalized 应为 'US 10Y Treasury'（而不是 'US Treasury'）。"
         "注意：不要误删本身就是 ticker/交易所符号的一部分的数字（例如股票代码/指数代码/外汇符号中的数字或点号等）。"
         "当原文疑似笔误/谐音/错别字时，可给出你认为最可能的标准名称，但不得凭空引入原文之外的新标的。"
         "本字段不得为空：若无法可靠标准化，则 instrument_normalized 必须等于原文 instrument（原样拷贝）。"
