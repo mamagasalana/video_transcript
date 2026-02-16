@@ -11,5 +11,7 @@ usage.db
 *.csv
 *.txt_
 *.json_
-
+.venv/*
 *.parquet
+outputs/viz/*.html
+outputs/viz/*.png
