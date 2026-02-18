@@ -1,6 +1,7 @@
 from main.visualize import main, load_outputs
 ret = load_outputs(debug=True)
 
+main_keys = []
 raw_cluster = []
 norm_cluster = []
 for main_key in ret['raw_map_multi'].keys():
@@ -9,7 +10,7 @@ for main_key in ret['raw_map_multi'].keys():
         if main_key in r2:
             break
     else:
-        tmp2 = ret['raw_map_multi'][main_key]
+        tmp2 = ret['raw_map_multi'][main_key].copy()
         tmp = set()
         cnt = -1
 
@@ -20,11 +21,11 @@ for main_key in ret['raw_map_multi'].keys():
 
             for v in tmp:
                 tmp2.update(ret['raw_map_multi'][v])
-        
-
+            break
+        main_keys.append(main_key)
         raw_cluster.append(tmp.copy())
         norm_cluster.append(tmp2.copy())
 import pandas as pd
-
-df = pd.DataFrame(zip([list(x) for x in  raw_cluster], [list(x) for x in  norm_cluster]), columns=['raw', 'norm'])
-df[df.raw != df.norm].to_csv('raw_norm.csv', index=False)
+df = pd.DataFrame(zip(main_keys, [list(x) for x in  raw_cluster], [list(x) for x in  norm_cluster]), columns=['key', 'raw', 'norm'])
+df['norm_count'] = df.norm.apply(lambda x: len(x))
+df[(df.raw != df.norm) ].to_csv('raw_norm.csv', index=False)
