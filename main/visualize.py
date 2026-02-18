@@ -4,15 +4,13 @@ import os
 from collections import defaultdict
 import glob
 from typing import Optional
-from pathlib import Path
-import argparse
-import sys
 import datetime as dtmod
 
 import matplotlib.pyplot as plt
 from matplotlib import font_manager, rcParams
 from collections import Counter
 
+OUT_FOLDER = "outputs/viz"
 ret = defaultdict(set)  # date_str -> {raw_instrument}
 
 # One-to-multi mapping:
@@ -100,12 +98,14 @@ def _pick_best_norm_for_raw(raw: str) -> Optional[str]:
     return candidates[0][0]
 
 
-def _load_outputs(glob_template: str, batches: int) -> None:
+def load_outputs(glob_template: str="outputs/model_output/2026_02_14_t2_{batch}_deepseek-reasoner/*",
+                 debug=False
+                 ) :
     def _strip_bom(s: str) -> str:
         # Some upstream files/fields may carry a UTF-8 BOM; strip it so labels render cleanly.
         return s.lstrip("\ufeff") if isinstance(s, str) else s
 
-    for batch in range(batches):
+    for batch in range(3):
         pattern = glob_template.format(batch=batch)
         for f in sorted(glob.glob(pattern)):
             f2 = os.path.basename(f)
@@ -129,16 +129,20 @@ def _load_outputs(glob_template: str, batches: int) -> None:
         raw_map[raw].add(best_norm)
         norm_map[best_norm].add(raw)
 
-
-
-def _build_ret2() -> defaultdict[str, set]:
     ret2_local: defaultdict[str, set] = defaultdict(set)  # date_str -> {normalized}
     for date_str, itms in ret.items():
         for itm in itms:
             tmp = raw_map[itm]
             assert len(tmp) == 1, "why not 1"
             ret2_local[date_str].add(next(iter(tmp)))
-    return ret2_local
+    if not debug:
+        return ret2_local
+    else:
+        return {'norm_map_multi': norm_map_multi,
+                'raw_map_multi':  raw_map_multi,
+                'raw_norm_counts':  raw_norm_counts,
+                'raw_map':  raw_map,
+                 'norm_map': norm_map}
 
 
 def _sort_dates(date_keys: list[str]) -> list[str]:
@@ -156,7 +160,6 @@ def _month_key_from_date_str(date_str: str) -> Optional[str]:
 
 def _plot_monthly_top_stacked(
     ret2_local: dict[str, set],
-    out_dir: Optional[str],
     show: bool,
     top_n: int,
 ) -> None:
@@ -202,8 +205,7 @@ def _plot_monthly_top_stacked(
     ax.set_title(f"ret2: top {top_n} instruments by month (stacked)")
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
     fig.tight_layout()
-    if out_dir:
-        fig.savefig(os.path.join(out_dir, f"ret2_top_{top_n}_by_month_stacked.png"), dpi=150)
+    fig.savefig(os.path.join(OUT_FOLDER, f"ret2_top_{top_n}_by_month_stacked.png"), dpi=150)
 
     if show:
         plt.show(block=True)
@@ -213,7 +215,6 @@ def _plot_monthly_top_stacked(
 
 def _plot_monthly_top_each_month(
     ret2_local: dict[str, set],
-    out_dir: Optional[str],
     show: bool,
     top_per_month: int,
 ) -> None:
@@ -310,11 +311,9 @@ def _plot_monthly_top_each_month(
                 margin=dict(l=60, r=260, t=80, b=80),
             )
             fig.update_xaxes(tickangle=-60)
-
-            if out_dir:
-                fig.write_html(
-                    os.path.join(out_dir, f"ret2_top_{top_per_month}_each_month_{year}.html")
-                )
+            fig.write_html(
+                os.path.join(OUT_FOLDER, f"ret2_top_{top_per_month}_each_month_{year}.html")
+            )
 
             if show:
                 fig.show()
@@ -360,10 +359,9 @@ def _plot_monthly_top_each_month(
         ax.set_title(f"ret2: top {top_per_month} instruments within each month (stacked) — {year}")
         ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
         fig.tight_layout()
-        if out_dir:
-            fig.savefig(
-                os.path.join(out_dir, f"ret2_top_{top_per_month}_each_month_{year}.png"), dpi=150
-            )
+        fig.savefig(
+            os.path.join(OUT_FOLDER, f"ret2_top_{top_per_month}_each_month_{year}.png"), dpi=150
+        )
 
         if show:
             plt.show(block=True)
@@ -373,7 +371,6 @@ def _plot_monthly_top_each_month(
 
 def _plot_ret2(
     ret2_local: dict[str, set],
-    out_dir: Optional[str],
     show: bool,
     top_n: int,
 ) -> None:
@@ -391,8 +388,7 @@ def _plot_ret2(
     ax.set_xlabel("# dates where present")
     ax.set_title(f"ret2: top {top_n} normalized instruments")
     fig.tight_layout()
-    if out_dir:
-        fig.savefig(os.path.join(out_dir, "ret2_top_instruments.png"), dpi=150)
+    fig.savefig(os.path.join(OUT_FOLDER, "ret2_top_instruments.png"), dpi=150)
 
     if show:
         plt.show(block=True)
@@ -400,49 +396,15 @@ def _plot_ret2(
         plt.close("all")
 
 
-def main(argv: list[str]) -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument(
-        "--glob-template",
-        default="outputs/model_output/2026_02_14_t2_{batch}_deepseek-reasoner/*",
-        help="Glob template for batch files. Use '{batch}' placeholder.",
-    )
-    p.add_argument("--batches", type=int, default=3)
-    p.add_argument("--out-dir", default="outputs/viz", help="Where to write PNGs (optional).")
-    p.add_argument("--no-save", action="store_true", help="Do not write PNGs to disk.")
-    args = p.parse_args(argv)
-
-    _load_outputs(args.glob_template, args.batches)
-    ret2_local = _build_ret2()
-
-    out_dir = None
-    if not args.no_save:
-        out_dir = args.out_dir
-        os.makedirs(out_dir, exist_ok=True)
-
-    _plot_ret2(
-        ret2_local,
-        out_dir=out_dir,
-        show=1,
-        top_n=10,
-    )
-
-    _plot_monthly_top_stacked(
-        ret2_local,
-        out_dir=out_dir,
-        show=1,
-        top_n=5,
-    )
-
-    _plot_monthly_top_each_month(
-        ret2_local,
-        out_dir=out_dir,
-        show=1,
-        top_per_month=5,
-    )
+def main() -> int:
+    ret2_local = load_outputs()
+    os.makedirs("outputs/viz", exist_ok=True)
+    _plot_ret2(ret2_local,show=1,top_n=10,)
+    _plot_monthly_top_stacked(ret2_local,show=1,top_n=5,)
+    _plot_monthly_top_each_month(ret2_local,show=1,top_per_month=5,)
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    main()

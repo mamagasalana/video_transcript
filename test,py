@@ -1,0 +1,30 @@
+from main.visualize import main, load_outputs
+ret = load_outputs(debug=True)
+
+raw_cluster = []
+norm_cluster = []
+for main_key in ret['raw_map_multi'].keys():
+
+    for r2 in raw_cluster:
+        if main_key in r2:
+            break
+    else:
+        tmp2 = ret['raw_map_multi'][main_key]
+        tmp = set()
+        cnt = -1
+
+        while cnt != len(tmp):
+            cnt  = len(tmp)
+            for v in tmp2:
+                tmp.update(ret['norm_map_multi'][v])
+
+            for v in tmp:
+                tmp2.update(ret['raw_map_multi'][v])
+        
+
+        raw_cluster.append(tmp.copy())
+        norm_cluster.append(tmp2.copy())
+import pandas as pd
+
+df = pd.DataFrame(zip([list(x) for x in  raw_cluster], [list(x) for x in  norm_cluster]), columns=['raw', 'norm'])
+df[df.raw != df.norm].to_csv('raw_norm.csv', index=False)
