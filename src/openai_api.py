@@ -413,6 +413,18 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
         )
 
     @override
+    def get_json3(self, input):
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.schema},
+                {"role": "user", "content": f"Input:\n<<<\n{input}\n>>>"},
+            ],
+            temperature=self.temperature,
+        )
+        return resp
+    
+    @override
     def get_json2(self, transcript, helper):
         resp = self.client.chat.completions.create(
             model=self.model,
@@ -467,6 +479,51 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             "total_tokens": usage.get("total_tokens", 0),
             'time_spent': time_spent,
         }
+    
+class OPENAI_API_CLASSIFICATION(OPENAI_API):
+    def __init__(self, pydantic_template: BaseModel, 
+                 output_folder:str, 
+                 schema: str, 
+                 model:str= 'openai',
+                 temperature:float=1.0):
+        """Initialize the extractor.
+
+        Args:
+            pydantic_template: Pydantic model class or instance used as the output template.
+            output_folder: Folder path to write extracted results.
+            schema: Prompt/schema instructions passed to the model.
+        """
+        super().__init__(
+            pydantic_template=pydantic_template,
+            output_folder=output_folder,
+            schema=schema,
+            model=model,
+            temperature=temperature
+        )
+    
+    @override
+    def get_json(self, input):
+        resp =  self.client.responses.parse(
+        model="gpt-5-nano",
+        input=[
+            {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
+            {"role": "user", "content": [{"type": "input_text", "text": f"Input:\n<<<\n{input}\n>>>"}]}
+            ],
+        text_format=self.template,
+        text={"verbosity":"low"},
+        reasoning={"effort": "high", "summary":"detailed"},
+        tools=[],
+        store=True,
+        include=[
+        ],
+        temperature=self.temperature,
+        timeout= 300,
+        # max_output_tokens=1000
+        )
+        
+        return resp
+
+
     
 if __name__ == "__main__":
 

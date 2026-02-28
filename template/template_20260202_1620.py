@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pydantic import BaseModel, Field
 from enum import Enum
-from typing import List, Optional, Literal, Annotated
+from typing import Dict, List, Optional, Literal, Annotated
 
 # its good to have an introduction that explain the background of this template
 """
@@ -152,37 +152,6 @@ SCHEMA_VERSION=2026-02-01T10:00:00
 
 
 SCHEMA_INSTRUMENT_RULES_EXTRACT = r"""
-SCHEMA_VERSION=2026-02-06T00:00:00
-你是一个会中文（普通话）且经验丰富的财经分析师。
-
-目标:
-从 Transcript 中抽取所有「可交易的金融标的」名称。金融交易标的是指可以在金融市场上直接买卖的具体金融工具。
-
-=== 核心判断规则 ===
-
-一、抽取条件（满足以下任一）：
-1. 具体公司实体：对应已上市公司股票
-2. 具体金融产品：对应交易所交易的具体产品（包括商品、货币、债券等）
-3. 具体指数：对应可交易或广泛引用的金融指数
-4. 行业/因子类：有对应广泛可交易指数产品的行业或投资因子术语
-
-二、排除条件（满足以下任一）：
-1. 宽泛资产类别术语（如"股票"类泛指）
-2. 不可交易的物理实体或非金融资产
-3. 未上市或已退市实体
-4. 无对应可交易指数产品的行业/因子术语
-
-=== 执行规则 ===
-1. 完全匹配原文子串，保持原格式
-2. 去重
-3. 拆分相邻标的为独立标的
-4. 纠正明显拼写错误
-5. 仅在金融上下文中抽取行业/因子术语
-
-注：所有判断基于金融常识和市场惯例。
-"""
-
-SCHEMA_INSTRUMENT_RULES_EXTRACT2 = r"""
 SCHEMA_VERSION=2026-02-13T00:00:00
 你是一个会中文（普通话）且经验丰富的财经分析师。
 
@@ -276,70 +245,181 @@ class TradingInstrument(BaseModel):
     instruments: List[TradingInstrumentBase] = Field(default_factory=list)
 
 
-SCHEMA_INSTRUMENT_RULES_VALIDATE = r"""
-SCHEMA_VERSION=2026-02-03T13:01:00
-你是一个会中文(普通话)而且经验丰富的财经分析师。
 
-输入:
-- Transcript：内涵instruments
+UnderlyingAsset = Literal[
+  # ----------------
+  # EQUITY (index-like exposures; country ignored)
+  # ----------------
+  'equity_benchmark' ,
 
-目标:
-对已抽取的 instruments 逐条进行验证，判断其是否符合可交易资产标准。
+  # equity_factor{Factor}'
+  'equity_factorValue' ,
+  'equity_factorMomentum' ,
+  'equity_factorQuality' ,
+  'equity_factorLowVolatility' ,
+  'equity_factorDividend' ,
+  'equity_factorSize' ,
 
-【强制验证与决策流程】
-在决定输出一个资产前，你必须进行以下逻辑验证：
-市场联想测试： 提到这个工具时，你是否能立刻想到一个具体的交易所名称或一个具体的交易产品代码？如果不能，它很可能不可交易。
-类别否决检查： 对照各类别的否决条款，检查该工具是否属于被明确排除的类型。
-最终判断： 只有通过以上测试的工具才符合输出条件。如果存疑，优先排除。
+  # equity_cap{Bucket}'
+  'equity_caplarge' ,
+  'equity_capmid' ,
+  'equity_capsmall' ,
 
-验证标准与范围（必须严格遵循，宁可错杀不要漏放）：
-1) 具有明确、公开、中心化的交易市场（如交易所、受监管的交易平台）。
-2) 有足够流动性（非极冷门品种）。
-3) 标准化程度高（期货、主要股票、主流债券等）。
-4) 核心修订原则：当识别一个工具时，你必须能联想到其至少一个具体的、活跃的交易市场或标准化产品。否则，判为不合格。
+  # equity_sector{GICS 11}'
+  'equity_sectorCommunicationServices' ,
+  'equity_sectorConsumerDiscretionary' ,
+  'equity_sectorConsumerStaples' ,
+  'equity_sectorEnergy' ,
+  'equity_sectorFinancials' ,
+  'equity_sectorHealthCare' ,
+  'equity_sectorIndustrials' ,
+  'equity_sectorInformationTechnology' ,
+  'equity_sectorMaterials' ,
+  'equity_sectorRealEstate' ,
+  'equity_sectorUtilities' ,
 
-分类标准与否决条款（严格执行）：
-【stock】个股/公司名/股票简称。必须是在主要证券交易所上市的公司股票。私有企业、仅场外交易的股票不予录取。
-【fx】外汇货币/汇率。非公开可交易的内部报价或非标准写法不予录取。
-【commodity】仅限传统大宗商品；非传统大宗商品不予录取。
-【crypto】仅限主流加密货币；非主流加密货币不予录取。
-【index】金融市场指数。必须拥有场内衍生品的指数。若仅为泛指市场概念，且无法对应到主流基准指数，则不予录取。
-【bond】债券。必须为公开交易、具有高信用评级和流动性的债券；私募债、非标资产、流动性极差的债券不予录取。
+  'equity_stock',
+  # ----------------'
+  # FX (single-currency groups; baskets map to main currency, e.g. DXY -> fx_usd)'
+  # Starter set (expand freely)'
+  # ----------------'
+  'fx_usd',
+  'fx_eur',
+  'fx_jpy',
+  'fx_gbp',
+  'fx_chf',
+  'fx_cad',
+  'fx_aud',
+  'fx_nzd',
+  'fx_cny',
+  'fx_hkd',
+  'fx_sgd',
+  'fx_myr',
+  'fx_inr',
+  'fx_krw',
+  'fx_other',
 
-验证要求:
-1) 覆盖性：所有在 instruments.instrument 中出现过的，都必须被覆盖；如因智能去重合并为同一 instrument_normalized，则需通过 instrument_id_reference 显式包含被合并的 instrument_id。
-2) 可追溯：instrument 必须来自 instruments.instrument 的原文写法（精确抄写，不要改写/翻译/补全）。
-3) 专业修正：instrument_normalized 字段必须对明显的笔误/谐音/错别字进行专业修正。
-4) 智能去重：同一 instrument_normalized 在 Transcript 多次出现时，只输出一次（合并为同一个条目）。
-"""
+
+  # ----------------'
+  # COMMODITY (buckets; ignore spot/future/expiry; brent+wti -> cmd_oil)'
+  # Starter set (expand freely)'
+  # ----------------'
+  'cmd_oil',
+  'cmd_natgas',
+  'cmd_gold',
+  'cmd_silver',
+  'cmd_copper',
+  'cmd_aluminum',
+  'cmd_ironore',
+  'cmd_coal',
+  'cmd_corn',
+  'cmd_wheat',
+  'cmd_soybean',
+  'cmd_other',
 
 
+  # ----------------'
+  # GOV (treasury by term only here; issuer/country ignored per your request)'
+  # Starter set (expand freely)'
+  # ----------------'
+  'gov_1M', 
+  'gov_3M', 
+  'gov_6M', 
+  'gov_1Y', 
+  'gov_2Y', 
+  'gov_3Y', 
+  'gov_5Y', 
+  'gov_7Y', 
+  'gov_10Y', 
+  'gov_20Y', 
+  'gov_30Y', 
+  'gov_other',
+  'unclassified', 
+  ]
 
+class InstrumentTagBase(BaseModel):
+    raw: str = Field(..., min_length=1, description="输入原文（ask 列表中的字符串），用于可追溯。")
 
-class TradingInstrumentValidatedBase(BaseModel):
-    instrument_id: int = field_id_deepseek
-    instrument: str =  Field(..., min_length=1, 
-        description=(
-        "该资产于transcript的原文。"))
-    instrument_normalized: str = field_instrument_normalized_deepseek
-    appearance_count: int = Field( ..., ge=1,description="应为同一 instrument_normalized 的 appearance_count 之和。",)
-    instrument_id_reference: List[int] = Field(
-        default_factory=list,
-        description="该条目合并/覆盖的 instrument_id 列表；用于满足覆盖性要求，需包含被合并的全部 instrument_id。",
-    )
-    instrument_type: AssetClass = Field(
+    underlying_assets: List[UnderlyingAsset] = Field(
         ...,
+        min_length=1, 
         description=(
-            "当 is_valid=false 时，instrument_type 必须为 invalid；"
-            "当 is_valid=true 时，必须为有效资产类别之一（stock/fx/commodity/crypto/index/bond）。"
+            "分组标签列表（Group Tags），用于把原文标的映射到你预定义的暴露组。"
+            "每个标签都采用固定字符串形式：{asset_class}_{description}"
+            "允许一个 raw 命中多个标签（如多因子/多行业/利率曲线价差等），但列表内不得重复。"
+            "注意：这里的标签不是自然语言名称，也不是合约类型（忽略 spot/future/expiry 等外壳），"
+            "而是你用于确定性分组与统计的“暴露类别 ID”。"
         ),
     )
-    is_valid: bool
-    reasons: List[str] = Field(
-        default_factory=list,
-        description="失败原因列表（若 is_valid=true，则可为空列表）。",
+
+    country: str = Field(
+        ...,
+        description="国家/地区代码 (ISO3) 或GLOBAL。",
     )
 
+    ticker: str = Field(
+        ...,
+        description="股票代码（仅当underlying_assets为equity_stock时填写）。",
+    )
 
-class TradingInstrumentValidated(BaseModel):
-    instruments: List[TradingInstrumentValidatedBase] = Field(default_factory=list)
+class InstrumentTag(BaseModel):
+    instruments: List[InstrumentTagBase] = Field(default_factory=list)
+
+
+SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
+SCHEMA_VERSION=2026-02-28T00:00:00
+You are a strict classification system. Your job is to map each input instrument string into one or more predefined exposure tags.
+
+INPUT:
+- The user provides a LIST of strings (it may look like JSON: ["...","..."] or like a Python list).
+- Treat EACH element as one item to classify.
+- Do NOT deduplicate.
+- Preserve order.
+
+OUTPUT (STRICT):
+- Output ONLY valid JSON. No markdown. No commentary.
+- The output MUST validate against the provided Pydantic/JSON Schema (the caller enforces it).
+- Populate `InstrumentTag.instruments` with EXACTLY N items where N == number of input strings.
+
+FOR EACH item (InstrumentTagBase):
+1) raw
+   - Must equal the original input string EXACTLY (no rewriting, no trimming, no normalization).
+2) underlying_assets
+   - Must be a NON-EMPTY list of allowed tags (UnderlyingAsset).
+   - No duplicates in the list.
+   - If unsure, output exactly ["unclassified"].
+3) country
+   - For non-stock exposures: ALWAYS "GLOBAL".
+   - Only when `equity_stock` is present in underlying_assets:
+     - If a ticker suffix is present, map by suffix:
+       - ".HK" -> "HKG"
+       - ".SS" or ".SZ" -> "CHN"
+       - ".T" -> "JPN"
+       - ".KS" or ".KQ" -> "KOR"
+       - ".L" -> "GBR"
+     - If it is a plain US-style ticker like "AAPL" (letters only), use "USA".
+     - Otherwise use "GLOBAL".
+4) ticker
+   - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
+   - If `equity_stock` IS present: extract best-effort ticker if explicitly present (e.g., "AAPL", "0700.HK", "600519.SS"), else "".
+
+CLASSIFICATION RULES (DECISION TREE):
+- FX:
+  - Currency names/codes/synonyms -> fx_* (e.g., "USD", "US Dollar", "US Dollar (USD)", "USD (US Dollar)" -> fx_usd).
+  - US Dollar Index / DXY -> fx_usd.
+  - Currency pair like "USD/JPY" or "USDJPY" -> include BOTH fx_usd and fx_jpy.
+  - Unknown currency -> fx_other.
+- COMMODITY:
+  - Gold/Silver/Oil/Natural gas/etc -> corresponding cmd_* tag; otherwise cmd_other.
+  - Ignore spot/future/expiry wrappers.
+- GOV / RATES:
+  - If tenor is mentioned, map to gov_1M/3M/6M/1Y/2Y/3Y/5Y/7Y/10Y/20Y/30Y.
+  - If it is gov/rates but tenor is unclear -> gov_other.
+- EQUITY:
+  - Broad equity market / index beta exposure -> equity_benchmark.
+  - Factor/style keywords -> equity_factorValue/Momentum/Quality/LowVolatility/Dividend/Size.
+  - Cap bucket keywords -> equity_caplarge/mid/small.
+  - Clear GICS 11 sector -> corresponding equity_sector*.
+  - Single company name or explicit ticker -> equity_stock.
+
+"""

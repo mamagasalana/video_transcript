@@ -6,8 +6,13 @@ import glob
 from typing import Optional
 import datetime as dtmod
 
-import matplotlib.pyplot as plt
-from matplotlib import font_manager, rcParams
+try:
+    import matplotlib.pyplot as plt  # type: ignore[import-not-found]
+    from matplotlib import font_manager, rcParams  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    plt = None
+    font_manager = None
+    rcParams = None
 from collections import Counter
 
 OUT_FOLDER = "outputs/viz"
@@ -48,6 +53,8 @@ class Visualizer:
         Fix "broken" Chinese/CJK characters in PNGs by selecting a CJK-capable font.
         Note: utf-8 / utf-8-sig affects decoding; font selection affects rendering.
         """
+        if font_manager is None or rcParams is None:
+            return None
         available = {f.name for f in font_manager.fontManager.ttflist}
         candidates = [
             preferred_font,
@@ -177,6 +184,8 @@ class Visualizer:
         show: bool,
         top_n: int,
     ) -> None:
+        if plt is None:
+            raise RuntimeError("Matplotlib is required for plotting. Install it with: pip install -r requirements-viz.txt")
         self._configure_plot_font(None)
 
         month_counts: dict[str, Counter] = defaultdict(Counter)  # mmyyyy -> Counter(inst -> count)
@@ -237,6 +246,8 @@ class Visualizer:
         Plot the top-N instruments *within each month* (not global top across months).
         Produces a single figure aligned like _plot_monthly_top_stacked.
         """
+        if plt is None:
+            raise RuntimeError("Matplotlib is required for plotting. Install it with: pip install -r requirements-viz.txt")
         self._configure_plot_font(None)
 
         month_counts: dict[str, Counter] = defaultdict(Counter)  # mmyyyy -> Counter(inst -> count)
@@ -390,6 +401,8 @@ class Visualizer:
         show: bool,
         top_n: int,
     ) -> None:
+        if plt is None:
+            raise RuntimeError("Matplotlib is required for plotting. Install it with: pip install -r requirements-viz.txt")
         self._configure_plot_font(None)
         # Top instruments overall (how many dates each appears on).
         freq = Counter()
