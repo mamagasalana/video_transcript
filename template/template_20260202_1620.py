@@ -319,7 +319,7 @@ UnderlyingAsset = Literal[
 
 
   # ----------------'
-  # GOV (treasury by term only here; issuer/country ignored per your request)'
+  # GOV (treasury by term buckets; country handled in `country`)'
   # Starter set (expand freely)'
   # ----------------'
   'gov_1M', 
@@ -389,16 +389,14 @@ FOR EACH item (InstrumentTagBase):
    - No duplicates in the list.
    - If unsure, output exactly ["unclassified"].
 3) country
-   - For non-stock exposures: ALWAYS "GLOBAL".
-   - Only when `equity_stock` is present in underlying_assets:
-     - If a ticker suffix is present, map by suffix:
-       - ".HK" -> "HKG"
-       - ".SS" or ".SZ" -> "CHN"
-       - ".T" -> "JPN"
-       - ".KS" or ".KQ" -> "KOR"
-       - ".L" -> "GBR"
-     - If it is a plain US-style ticker like "AAPL" (letters only), use "USA".
-     - Otherwise use "GLOBAL".
+   - For COMMODITY and FX exposures: ALWAYS "GLOBAL".
+     - If any `cmd_*` tag is present in underlying_assets -> country="GLOBAL".
+     - If any `fx_*` tag is present in underlying_assets -> country="GLOBAL".
+   - Otherwise (non-FX, non-commodity): return an ISO3 country code if you can infer it from the raw string; else "GLOBAL".
+     - When GOV/RATES is present (any `gov_*` tag):
+       - If the raw string clearly indicates the sovereign/issuer, map to ISO3, else "GLOBAL".
+     - When EQUITY index / benchmark / sector / factor exposure (not single-stock) is present:
+       - If it clearly refers to a single-country index/market, map to ISO3; if global/regional, use "GLOBAL".
 4) ticker
    - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
    - If `equity_stock` IS present: extract best-effort ticker if explicitly present (e.g., "AAPL", "0700.HK", "600519.SS"), else "".

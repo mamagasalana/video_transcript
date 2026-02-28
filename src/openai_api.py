@@ -11,6 +11,7 @@ import glob
 import re
 import os
 import json
+import hashlib
 
 from typing_extensions import override
 from dataclasses import dataclass
@@ -33,9 +34,11 @@ class BatchItem:
 BatchInputs = Union[Iterable[Tuple[str, str]], Iterable[BatchItem]]
 
 
-def texts_to_items(texts: Iterable[str], prefix: str = "item") -> Iterator[BatchItem]:
-    for i, text in enumerate(texts, start=1):
-        yield BatchItem(id=f"{prefix}_{i:04d}", text=text)
+def texts_to_items(texts: Iterable[str]) -> Iterator[BatchItem]:
+    for text in texts:
+        text_str = str(text)
+        text_hash = hashlib.sha1(text_str.encode("utf-8")).hexdigest()
+        yield BatchItem(id=text_hash, text=text_str)
 
 
 def iter_batch_items(inputs: BatchInputs) -> Iterator[BatchItem]:
@@ -147,6 +150,9 @@ class OPENAI_API:
                 transcript = ifile.read()
             yield BatchItem(id=dt, text=transcript)
 
+    def iter_items_from_glob(self, glob_pattern: Optional[str]) -> Iterator[BatchItem]:
+        return self._iter_items_from_glob(glob_pattern)
+
     def _iter_items_from_glob_with_helper(
         self, glob_pattern: Optional[str], helper_folder: str
     ) -> Iterator[BatchItem]:
@@ -158,6 +164,11 @@ class OPENAI_API:
             with open(support_file[0], 'r') as ifile:
                 support = ifile.read()
             yield BatchItem(id=item.id, text=item.text, helper=support)
+
+    def iter_items_from_glob_with_helper(
+        self, glob_pattern: Optional[str], helper_folder: str
+    ) -> Iterator[BatchItem]:
+        return self._iter_items_from_glob_with_helper(glob_pattern, helper_folder)
 
     def run_batch(self, inputs: BatchInputs, token_cap=TOKEN_CAP, force=False):
         ustrack = UsageTracker(model=self.model, cap=token_cap)
@@ -468,5 +479,5 @@ if __name__ == "__main__":
     from template.template import TopicChunks
 
     app = OPENAI_API(TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
-    for _ in app.run_batch(app._iter_items_from_glob(None)):
+    for _ in app.run_batch(app.iter_items_from_glob(None)):
         break
