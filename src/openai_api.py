@@ -12,9 +12,9 @@ import re
 import os
 import json
 
-from dotenv import load_dotenv
 from typing_extensions import override
-from typing import List
+from dataclasses import dataclass
+from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
 import time
 import asyncio
 import nest_asyncio
@@ -23,12 +23,50 @@ SEED  = 12345
 
 nf = NormFinder('')
 
+@dataclass(frozen=True)
+class BatchItem:
+    id: str
+    text: str
+    helper: Optional[str] = None
+
+
+BatchInputs = Union[Iterable[Tuple[str, str]], Iterable[BatchItem]]
+
+
+def texts_to_items(texts: Iterable[str], prefix: str = "item") -> Iterator[BatchItem]:
+    for i, text in enumerate(texts, start=1):
+        yield BatchItem(id=f"{prefix}_{i:04d}", text=text)
+
+
+def iter_batch_items(inputs: BatchInputs) -> Iterator[BatchItem]:
+    for item in inputs:
+        if isinstance(item, BatchItem):
+            yield item
+            continue
+        if (
+            isinstance(item, tuple)
+            and len(item) == 2
+            and isinstance(item[0], str)
+            and isinstance(item[1], str)
+        ):
+            yield BatchItem(id=item[0], text=item[1])
+            continue
+        raise TypeError(
+            "inputs must be an iterable of BatchItem or (id: str, text: str) tuples"
+        )
+
+
+def _format_blocks(blocks: Sequence[Tuple[str, str]]) -> str:
+    return "\n".join([f"{label}:\n<<<\n{value}\n>>>" for (label, value) in blocks])
+
+
 class OPENAI_API:
     def __init__(self, pydantic_template: BaseModel, 
                  output_folder:str, 
                  schema: str, 
                  model:str= 'openai',
-                 temperature:float=1.0):
+                 temperature:float=1.0,
+                 default_block_label: str = "Transcript"):
         """Initialize the extractor.
 
         Args:
@@ -40,6 +78,7 @@ class OPENAI_API:
         self.model = model
         self.template = pydantic_template
         self.temperature = temperature
+        self.default_block_label = default_block_label
         self.OUTPUT_FOLDER= os.path.join('outputs/model_output', '%s_%s' % (output_folder, self.model))
         self.DEBUG_PATH = os.path.join('outputs/reasoning', 'debug_%s_%s' % (output_folder, self.model))
         os.makedirs(self.OUTPUT_FOLDER, exist_ok=True)
@@ -47,47 +86,32 @@ class OPENAI_API:
         FolderSchemaTracker().set(folder=output_folder, model=self.model, schema=self.schema)
         self.client = OpenAI()
 
-    def get_json(self, transcript):
-        resp =  self.client.responses.parse(
-        model="gpt-5-nano",
-        input=[
-            {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
-            {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>"}]}
+    def request(self, *, blocks: Sequence[Tuple[str, str]]):
+        user_text = _format_blocks(blocks)
+        resp = self.client.responses.parse(
+            model="gpt-5-nano",
+            input=[
+                {"role": "developer", "content": [{"type": "input_text", "text": self.schema}]},
+                {"role": "user", "content": [{"type": "input_text", "text": user_text}]},
             ],
-        text_format=self.template,
-        text={"verbosity":"low"},
-        reasoning={"effort": "high", "summary":"detailed"},
-        tools=[],
-        store=True,
-        include=[
-        ],
-        temperature=self.temperature,
-        timeout= 300,
-        # max_output_tokens=1000
+            text_format=self.template,
+            text={"verbosity": "low"},
+            reasoning={"effort": "high", "summary": "detailed"},
+            tools=[],
+            store=True,
+            include=[],
+            temperature=self.temperature,
+            timeout=300,
+            # max_output_tokens=1000
         )
-        
         return resp
 
+    def get_json(self, text, block_label: Optional[str] = None):
+        label = block_label or self.default_block_label
+        return self.request(blocks=[(label, text)])
+
     def get_json2(self, transcript, helper):
-        resp =  self.client.responses.parse(
-        model="gpt-5-nano",
-        input=[
-            {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
-            {"role": "user", "content": [{"type": "input_text", "text": f"Transcript:\n<<<\n{transcript}\n>>>\nHelper:\n<<<\n{helper}\n>>>"}]}
-            ],
-        text_format=self.template,
-        text={"verbosity":"low"},
-        reasoning={"effort": "high", "summary":"detailed"},
-        tools=[],
-        store=True,
-        include=[
-        ],
-        timeout= 300,
-        temperature=self.temperature,
-        # max_output_tokens=1000
-        )
-        
-        return resp
+        return self.request(blocks=[("Transcript", transcript), ("Helper", helper)])
 
     def extract_output(self, resp):        
         js = resp.output_parsed.model_dump_json(indent=2)
@@ -111,40 +135,61 @@ class OPENAI_API:
             'time_spent': time_spent,
         }
 
-    def run_batch(self, glob_pattern=None, token_cap=TOKEN_CAP, force=False):
+    def _iter_items_from_glob(self, glob_pattern: Optional[str]) -> Iterator[BatchItem]:
+        if glob_pattern:
+            transcript_files = sorted(glob.glob(glob_pattern))
+        else:
+            transcript_files = sorted(glob.glob('transcript2/*.txt'))
+
+        for transcript_file in transcript_files:
+            dt = os.path.basename(transcript_file).split('.')[0]
+            with open(transcript_file, 'r') as ifile:
+                transcript = ifile.read()
+            yield BatchItem(id=dt, text=transcript)
+
+    def _iter_items_from_glob_with_helper(
+        self, glob_pattern: Optional[str], helper_folder: str
+    ) -> Iterator[BatchItem]:
+        for item in self._iter_items_from_glob(glob_pattern):
+            support_file = glob.glob(
+                os.path.join('outputs/model_output', helper_folder, f'{item.id}*')
+            )
+            assert support_file, "Support file not found"
+            with open(support_file[0], 'r') as ifile:
+                support = ifile.read()
+            yield BatchItem(id=item.id, text=item.text, helper=support)
+
+    def run_batch(self, inputs: BatchInputs, token_cap=TOKEN_CAP, force=False):
         ustrack = UsageTracker(model=self.model, cap=token_cap)
         spent = ustrack.get()['spent']
 
-        if glob_pattern:
-            transcripts = sorted(glob.glob(glob_pattern))
-        else:
-            transcripts = sorted(glob.glob('transcript2/*.txt'))
-        pbar = tqdm(transcripts, desc="Extracting", unit="doc")
-        for i, transcript_file in enumerate(pbar, start=1):
+        items: Iterable[BatchItem] = iter_batch_items(inputs)
+
+        pbar = tqdm(items, desc="Extracting", unit="doc")
+        for item in pbar:
             # stop BEFORE calling if already at/over cap
             
             if spent >= token_cap:
                 pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
                 break
             
-            dt = os.path.basename(transcript_file).split('.')[0]
-            out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
+            out_path = os.path.join(self.OUTPUT_FOLDER, f"{item.id}.json")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{item.id}.txt")
             if not force and os.path.exists(out_path):
                 continue
 
-            with open(transcript_file, 'r') as ifile:
-                transcript = ifile.read()
-
-            transcript2 = nf.normalize_zh_transcript(transcript)
+            transcript2 = nf.normalize_zh_transcript(item.text)
             
             now = time.time()
-            resp = self.get_json(transcript2)
+            if item.helper is None:
+                resp = self.get_json(transcript2)
+            else:
+                resp = self.get_json2(transcript2, item.helper)
 
             try:
                 js, summary, used = self.extract_output(resp)
             except:
-                print('error formatting? %s' % dt)
+                print('error formatting? %s' % item.id)
                 yield resp
                 raise
 
@@ -157,9 +202,9 @@ class OPENAI_API:
             spent = ustrack.set(used)
 
             try:
-                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) , time.time() - now))
+                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(item.id)) , time.time() - now))
             except:
-                print('error parsing usage? %s' % dt)
+                print('error parsing usage? %s' % item.id)
                 yield resp
                 raise
 
@@ -175,33 +220,32 @@ class OPENAI_API:
             
             yield resp  # or yield resp.output_parsed, etc.
 
-    async def _process_one_file_async(
+    async def _process_one_item_async(
         self,
-        transcript_file: str,
+        item: BatchItem,
         ustrack: UsageTracker,
         usage_lock: asyncio.Lock,
         force: bool,
         semaphore: asyncio.Semaphore,
     ):
         async with semaphore:
-            dt = os.path.basename(transcript_file).split('.')[0]
-            out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
+            out_path = os.path.join(self.OUTPUT_FOLDER, f"{item.id}.json")
+            debug_path = os.path.join(self.DEBUG_PATH, f"d{item.id}.txt")
             if not force and os.path.exists(out_path):
-                return {"dt": dt, "skipped": True, "used": 0}
+                return {"dt": item.id, "skipped": True, "used": 0}
 
-            with open(transcript_file, 'r') as ifile:
-                transcript = ifile.read()
-
-            transcript2 = nf.normalize_zh_transcript(transcript)
+            transcript2 = nf.normalize_zh_transcript(item.text)
 
             now = time.time()
-            resp = await asyncio.to_thread(self.get_json, transcript2)
+            if item.helper is None:
+                resp = await asyncio.to_thread(self.get_json, transcript2)
+            else:
+                resp = await asyncio.to_thread(self.get_json2, transcript2, item.helper)
 
             try:
                 js, summary, used = self.extract_output(resp)
             except Exception as exc:
-                print('error formatting? %s' % dt)
+                print('error formatting? %s' % item.id)
                 raise exc
 
             with open(out_path, "w", encoding="utf-8") as ofile:
@@ -216,25 +260,45 @@ class OPENAI_API:
                     ustrack.update_db(
                         self.normalize_usage(
                             resp,
-                            '%s/%s' % (self.OUTPUT_FOLDER, str(dt)),
+                            '%s/%s' % (self.OUTPUT_FOLDER, str(item.id)),
                             time.time() - now,
                         )
                     )
                 except Exception as exc:
-                    print('error parsing usage? %s' % dt)
+                    print('error parsing usage? %s' % item.id)
                     raise exc
 
             return {
-                "dt": dt,
+                "dt": item.id,
                 "skipped": False,
                 "used": used,
                 "spent": spent,
                 "resp": resp,
             }
 
+    async def _process_one_file_async(
+        self,
+        transcript_file: str,
+        ustrack: UsageTracker,
+        usage_lock: asyncio.Lock,
+        force: bool,
+        semaphore: asyncio.Semaphore,
+    ):
+        dt = os.path.basename(transcript_file).split('.')[0]
+        with open(transcript_file, 'r') as ifile:
+            transcript = ifile.read()
+        item = BatchItem(id=dt, text=transcript)
+        return await self._process_one_item_async(
+            item=item,
+            ustrack=ustrack,
+            usage_lock=usage_lock,
+            force=force,
+            semaphore=semaphore,
+        )
+
     def run_batch_multiprocess(
         self,
-        file_list: List[str] = [],
+        inputs: BatchInputs,
         force: bool = False,
         max_workers: int = 20,
         raise_on_error: bool = True,
@@ -242,24 +306,20 @@ class OPENAI_API:
         async def _runner():
             ustrack = UsageTracker(model=self.model, cap=TOKEN_CAP)
 
-            if file_list:
-                transcripts = sorted(file_list)
-            else:
-                transcripts = sorted(glob.glob('transcript2/*.txt'))
+            items = iter_batch_items(inputs)
 
             semaphore = asyncio.Semaphore(max_workers)
             usage_lock = asyncio.Lock()
 
             tasks = []
-            for transcript_file in transcripts:
-                dt = os.path.basename(transcript_file).split('.')[0]
-                out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
+            for item in items:
+                out_path = os.path.join(self.OUTPUT_FOLDER, f"{item.id}.json")
                 if not force and os.path.exists(out_path):
                     continue
                 tasks.append(
                     asyncio.create_task(
-                        self._process_one_file_async(
-                            transcript_file=transcript_file,
+                        self._process_one_item_async(
+                            item=item,
                             ustrack=ustrack,
                             usage_lock=usage_lock,
                             force=force,
@@ -308,83 +368,15 @@ class OPENAI_API:
 
 
 
-    def run_batch_with_helper(self, glob_pattern: str=None, helper_folder: str=None, token_cap=TOKEN_CAP, force=False):
+    def run_batch_with_helper(self, inputs: BatchInputs, token_cap=TOKEN_CAP, force=False):
         """Get support from topic?
 
         Args:
-            glob_pattern (str, optional): glob file path. Defaults to None.
-            helper_folder (str, optional): an experimental function to improve accuracy. Defaults to None.
             token_cap (_type_, optional): early exit if token cap reach. Defaults to TOKEN_CAP.
             force (bool, optional): overwrite file if True. Defaults to False.
         """
-        ustrack = UsageTracker(model=self.model, cap=token_cap)
-        spent = ustrack.get()['spent']
-
-        if glob_pattern:
-            transcripts = sorted(glob.glob(glob_pattern))
-        else:
-            transcripts = sorted(glob.glob('transcript2/*.txt'))
-        pbar = tqdm(transcripts, desc="Extracting", unit="doc")
-        for i, transcript_file in enumerate(pbar, start=1):
-            # stop BEFORE calling if already at/over cap
-            
-            if spent >= token_cap:
-                pbar.set_postfix({"spent": spent, "cap": token_cap, "status": "cap reached"})
-                break
-            
-            dt = os.path.basename(transcript_file).split('.')[0]
-            out_path = os.path.join(self.OUTPUT_FOLDER, f"{dt}.json")
-            debug_path = os.path.join(self.DEBUG_PATH, f"d{dt}.txt")
-            if not force and os.path.exists(out_path):
-                continue
-
-            with open(transcript_file, 'r') as ifile:
-                transcript = ifile.read()
-
-            transcript2 = nf.normalize_zh_transcript(transcript)
-
-            support_file = glob.glob(os.path.join('outputs/model_output', helper_folder, f'{dt}*'))
-            assert support_file, "Support file not found"
-
-            with open(support_file[0], 'r') as ifile:
-                support= ifile.read()
-            
-            now = time.time()
-            resp = self.get_json2(transcript2, support)
-
-            try:
-                js, summary, used = self.extract_output(resp)
-            except:
-                print('error formatting? %s' % dt)
-                yield resp
-                raise
-
-            with open(out_path, "w", encoding="utf-8") as ofile:
-                ofile.write(js)
-                
-            with open(debug_path, 'w') as ofile:   
-                ofile.writelines(summary)
-
-            spent = ustrack.set(used)
-
-            try:
-                ustrack.update_db(self.normalize_usage(resp, '%s/%s' % (self.OUTPUT_FOLDER ,str(dt)) , time.time() - now))
-            except:
-                print('error parsing usage? %s' % dt)
-                yield resp
-                raise
-
-            pbar.set_postfix({
-                "used": used,
-                "spent": spent,
-                "remain": max(token_cap - spent, 0),
-            })
-
-            # stop AFTER call if this call pushed you over
-            if spent >= token_cap:
-                break
-            
-            yield resp  # or yield resp.output_parsed, etc.
+        for resp in self.run_batch(inputs=inputs, token_cap=token_cap, force=force):
+            yield resp
 
 
 class OPENAI_API_DEEPSEEK(OPENAI_API):
@@ -394,7 +386,8 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             output_folder=output_folder,
             schema=schema,
             model=model,
-            temperature=temperature
+            temperature=temperature,
+            default_block_label="Transcript",
         )
         self.schema = f"""
 {schema}
@@ -406,19 +399,20 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
 输出内容必须严格符合以下 JSON Schema：
 {json.dumps(self.template.model_json_schema(), indent=2, ensure_ascii=False)}
         """
+        FolderSchemaTracker().set(folder=output_folder, model=self.model, schema=self.schema)
         self.client = OpenAI(api_key=os.getenv('DEEPSEEK_API_KEY'), base_url='https://api.deepseek.com')
         self._JSON_FENCE_RE = re.compile(
             r"```(?:json)?\s*([\s\S]*?)\s*```",
             re.IGNORECASE
         )
 
-    @override
-    def get_json3(self, input):
+    def request(self, *, blocks: Sequence[Tuple[str, str]]):
+        user_text = _format_blocks(blocks)
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": self.schema},
-                {"role": "user", "content": f"Input:\n<<<\n{input}\n>>>"},
+                {"role": "user", "content": user_text},
             ],
             temperature=self.temperature,
         )
@@ -426,27 +420,11 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
     
     @override
     def get_json2(self, transcript, helper):
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self.schema},
-                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>\nHelper:\n<<<\n{helper}\n>>>"},
-            ],
-            temperature=self.temperature,
-        )
-        return resp
+        return super().get_json2(transcript, helper)
              
     @override
-    def get_json(self, transcript):
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self.schema},
-                {"role": "user", "content": f"Transcript:\n<<<\n{transcript}\n>>>"},
-            ],
-            temperature=self.temperature,
-        )
-        return resp
+    def get_json(self, text, block_label: Optional[str] = None):
+        return super().get_json(text, block_label=block_label)
 
 
     @override
@@ -480,53 +458,8 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
             'time_spent': time_spent,
         }
     
-class OPENAI_API_CLASSIFICATION(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, 
-                 output_folder:str, 
-                 schema: str, 
-                 model:str= 'openai',
-                 temperature:float=1.0):
-        """Initialize the extractor.
 
-        Args:
-            pydantic_template: Pydantic model class or instance used as the output template.
-            output_folder: Folder path to write extracted results.
-            schema: Prompt/schema instructions passed to the model.
-        """
-        super().__init__(
-            pydantic_template=pydantic_template,
-            output_folder=output_folder,
-            schema=schema,
-            model=model,
-            temperature=temperature
-        )
-    
-    @override
-    def get_json(self, input):
-        resp =  self.client.responses.parse(
-        model="gpt-5-nano",
-        input=[
-            {"role": "developer", "content": [{"type": "input_text","text": self.schema,}]}, 
-            {"role": "user", "content": [{"type": "input_text", "text": f"Input:\n<<<\n{input}\n>>>"}]}
-            ],
-        text_format=self.template,
-        text={"verbosity":"low"},
-        reasoning={"effort": "high", "summary":"detailed"},
-        tools=[],
-        store=True,
-        include=[
-        ],
-        temperature=self.temperature,
-        timeout= 300,
-        # max_output_tokens=1000
-        )
-        
-        return resp
-
-
-    
 if __name__ == "__main__":
-
     load_dotenv() 
     OUTPUT_FOLDER= os.getenv('OUTPUT_FOLDER')
     assert OUTPUT_FOLDER , "output folder missing?"
@@ -534,7 +467,6 @@ if __name__ == "__main__":
     from src.schemas import SCHEMA_DEVELOPER_OPENAI
     from template.template import TopicChunks
 
-    app = OPENAI_API( TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
-    for _ in app.run_batch():
+    app = OPENAI_API(TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
+    for _ in app.run_batch(app._iter_items_from_glob(None)):
         break
-    
