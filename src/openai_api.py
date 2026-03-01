@@ -391,14 +391,18 @@ class OPENAI_API:
 
 
 class OPENAI_API_DEEPSEEK(OPENAI_API):
-    def __init__(self, pydantic_template: BaseModel, output_folder:str, schema: str, model: str="deepseek-reasoner", temperature: float=1.0):
+    def __init__(self, pydantic_template: BaseModel, 
+                 output_folder:str, 
+                 schema: str, model: str="deepseek-reasoner", 
+                 temperature: float=1.0,
+                 default_block_label="Transcript"):
         super().__init__(
             pydantic_template=pydantic_template,
             output_folder=output_folder,
             schema=schema,
             model=model,
             temperature=temperature,
-            default_block_label="Transcript",
+            default_block_label=default_block_label,
         )
         self.schema = f"""
 {schema}
