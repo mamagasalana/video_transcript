@@ -425,7 +425,7 @@ class InstrumentTag(BaseModel):
 
 
 SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
-SCHEMA_VERSION=2026-03-01T01:00:00
+SCHEMA_VERSION=2026-03-01T02:00:00
 You are a strict classification system. Your job is to map each input instrument string into one or more predefined exposure tags.
 
 INPUT:
@@ -458,10 +458,18 @@ FOR EACH item (InstrumentTagBase):
        - If the raw string clearly indicates a country/region issuer (e.g., "US High Yield Bonds", "China HY bonds"), map to ISO3; else "GLOBAL".
      - When EQUITY index / benchmark / sector / factor exposure (not single-stock) is present:
        - If it clearly refers to a single-country index/market, map to ISO3; if global/regional, use "GLOBAL".
+     - When `equity_stock` is present:
+       - You SHOULD infer the country from common financial knowledge (issuer domicile / primary listing) even if the raw string is just a company name.
+       - If the raw includes an exchange/ticker suffix (e.g., ".HK", ".TW", ".T", ".SS", ".SZ"), use that to infer country.
+       - Only use "GLOBAL" if the company is genuinely ambiguous or you cannot make a reasonable best-effort inference.
 4) ticker
    - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
-   - If `equity_stock` IS present: extract best-effort ticker if explicitly present (e.g., "AAPL", "0700.HK", "600519.SS"), else "".
-   - NEVER infer a ticker that is not explicitly present in raw.
+   - If `equity_stock` IS present:
+     - If an explicit ticker is present in raw (e.g., "AAPL", "0700.HK", "600519.SS"), copy it.
+     - Otherwise, you SHOULD infer the most representative ticker from common financial knowledge.
+       - Prefer the primary / most-liquid listing ticker (not an ADR) unless the raw explicitly indicates the ADR or US listing.
+       - If multiple tickers are plausible, choose the most common primary listing used in news/quotes; do not output multiple tickers.
+       - If you truly cannot infer a ticker, output "".
 
 CLASSIFICATION RULES (DECISION TREE):
 - FX:
