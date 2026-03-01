@@ -21,6 +21,7 @@ class Visualizer:
     def __init__(self, out_folder: str = OUT_FOLDER) -> None:
         self.out_folder = out_folder
         self.raw_norm_counts = defaultdict(lambda: defaultdict(int))  # raw -> normalized -> count
+        self.classification_map = {}
 
     def _extract_date_str(self, s: str) -> str:
         """
@@ -117,6 +118,31 @@ class Visualizer:
         raw_norm_counts = defaultdict(lambda: defaultdict(int))  # raw -> normalized -> count
         self.raw_norm_counts = raw_norm_counts
 
+        classification_map = {}
+        classifications = []
+        for f in glob.glob('outputs/model_output/class1_deepseek-reasoner/*'):
+            js = json.load(open(f, 'r'))
+            classifications.extend(js['instruments'])
+        for x in classifications:
+            norm_inst =  x['raw']
+            tmp = []
+            country = '_%s' % x['country']
+            if country == '_GLOBAL':
+                country = ''
+            ticker = x['ticker']
+            if ticker:
+                ticker  = '_%s' % ticker
+            
+            for ua in x['underlying_assets']:
+                if len(x['underlying_assets']) ==2:
+                    if ua == 'fx_usd':
+                        continue
+                tmp.append('%s%s%s' % (ua, country, ticker))
+            classification_map[norm_inst] = tmp.copy()
+            
+        self.classification_map = classification_map
+
+
         for batch in range(3):
             pattern = glob_template.format(batch=batch)
             for f in sorted(glob.glob(pattern)):
@@ -162,7 +188,48 @@ class Visualizer:
                      'norm_map': norm_map,
                      'raw_count': raw_count,
                      'norm_count': norm_count,
+                     'classification_map': classification_map,
                      }
+
+    def load_outputs_tags(
+        self,
+        glob_template: str = "outputs/model_output/2026_02_14_t2_{batch}_deepseek-reasoner/*",
+        *,
+        include_unmapped: bool = False,
+        unmapped_label: str = "Unmapped",
+    ) -> dict[str, list[str]]:
+        """
+        Build date -> list of classification tags using `classification_map` keyed by norm_inst.
+
+        If a norm_inst maps to multiple tags, each tag is added (+1 for each when counting).
+        """
+        if not self.classification_map:
+            # Also builds self.classification_map.
+            self.load_outputs(glob_template=glob_template, debug=True)
+
+        ret_tags: defaultdict[str, list[str]] = defaultdict(list)
+        for batch in range(3):
+            pattern = glob_template.format(batch=batch)
+            for f in sorted(glob.glob(pattern)):
+                f2 = os.path.basename(f)
+                date_str = self._extract_date_str(f2)
+                with open(f, "r", encoding="utf-8-sig") as fp:
+                    js = json.load(fp)["instruments"]
+                for itm in js:
+                    raw_inst = self._strip_bom(itm["instrument"])
+                    norm_inst = self._strip_bom(itm["instrument_normalized"])
+                    if raw_inst == norm_inst:
+                        continue
+
+                    tags = self.classification_map.get(norm_inst)
+                    if isinstance(tags, list) and tags:
+                        # de-dupe within a single instrument mapping (avoid accidental double-count)
+                        tags = list(dict.fromkeys([str(t) for t in tags if str(t).strip()]))
+                        ret_tags[date_str].extend(tags)
+                    elif include_unmapped:
+                        ret_tags[date_str].append(unmapped_label)
+
+        return dict(ret_tags)
 
 
     def _sort_dates(self, date_keys: list[str]) -> list[str]:
@@ -180,7 +247,7 @@ class Visualizer:
 
     def _plot_monthly_top_stacked(
         self,
-        ret2_local: dict[str, set],
+        ret2_local: dict[str, list[str]] | dict[str, set],
         show: bool,
         top_n: int,
     ) -> None:
@@ -225,10 +292,10 @@ class Visualizer:
         ax.set_xticks(x)
         ax.set_xticklabels(months, rotation=60, ha="right")
         ax.set_ylabel("# (date, instrument) occurrences")
-        ax.set_title(f"ret2: top {top_n} instruments by month (stacked)")
+        ax.set_title(f"classification: top {top_n} tags by month (stacked)")
         ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
         fig.tight_layout()
-        fig.savefig(os.path.join(self.out_folder, f"ret2_top_{top_n}_by_month_stacked.png"), dpi=150)
+        fig.savefig(os.path.join(self.out_folder, f"class_top_{top_n}_by_month_stacked.png"), dpi=150)
 
         if show:
             plt.show(block=True)
@@ -238,7 +305,7 @@ class Visualizer:
 
     def _plot_monthly_top_each_month(
         self,
-        ret2_local: dict[str, set],
+        ret2_local: dict[str, list[str]] | dict[str, set],
         show: bool,
         top_per_month: int,
     ) -> None:
@@ -330,15 +397,15 @@ class Visualizer:
 
                 fig.update_layout(
                     barmode="stack",
-                    title=f"ret2: top {top_per_month} instruments within each month (stacked) — {year}",
+                    title=f"classification: top {top_per_month} tags within each month (stacked) — {year}",
                     xaxis_title="Month (mmyyyy)",
                     yaxis_title="# (date, instrument) occurrences",
-                    legend_title_text="Instrument",
+                    legend_title_text="Tag",
                     margin=dict(l=60, r=260, t=80, b=80),
                 )
                 fig.update_xaxes(tickangle=-60)
                 fig.write_html(
-                    os.path.join(self.out_folder, f"ret2_top_{top_per_month}_each_month_{year}.html")
+                    os.path.join(self.out_folder, f"class_top_{top_per_month}_each_month_{year}.html")
                 )
 
                 if show:
@@ -382,11 +449,11 @@ class Visualizer:
             ax.set_xticks(x)
             ax.set_xticklabels(months_year, rotation=60, ha="right")
             ax.set_ylabel("# (date, instrument) occurrences")
-            ax.set_title(f"ret2: top {top_per_month} instruments within each month (stacked) — {year}")
+            ax.set_title(f"classification: top {top_per_month} tags within each month (stacked) — {year}")
             ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
             fig.tight_layout()
             fig.savefig(
-                os.path.join(self.out_folder, f"ret2_top_{top_per_month}_each_month_{year}.png"), dpi=150
+                os.path.join(self.out_folder, f"class_top_{top_per_month}_each_month_{year}.png"), dpi=150
             )
 
             if show:
@@ -397,7 +464,7 @@ class Visualizer:
 
     def _plot_ret2(
         self,
-        ret2_local: dict[str, set],
+        ret2_local: dict[str, list[str]] | dict[str, set],
         show: bool,
         top_n: int,
     ) -> None:
@@ -415,9 +482,9 @@ class Visualizer:
         fig, ax = plt.subplots(figsize=(10, max(4, 0.25 * len(labels))))
         ax.barh(labels, values)
         ax.set_xlabel("# dates where present")
-        ax.set_title(f"ret2: top {top_n} normalized instruments")
+        ax.set_title(f"classification: top {top_n} tags")
         fig.tight_layout()
-        fig.savefig(os.path.join(self.out_folder, "ret2_top_instruments.png"), dpi=150)
+        fig.savefig(os.path.join(self.out_folder, "class_top_items.png"), dpi=150)
 
         if show:
             plt.show(block=True)
@@ -426,11 +493,12 @@ class Visualizer:
 
 
     def main(self) -> int:
-        ret2_local = self.load_outputs()
+        # Use classification tags (including multi-tag instruments) instead of normalized instrument strings.
+        ret_tags = self.load_outputs_tags()
         os.makedirs(self.out_folder, exist_ok=True)
-        self._plot_ret2(ret2_local,show=1,top_n=10,)
-        self._plot_monthly_top_stacked(ret2_local,show=1,top_n=5,)
-        self._plot_monthly_top_each_month(ret2_local,show=1,top_per_month=5,)
+        self._plot_ret2(ret_tags, show=1, top_n=10)
+        self._plot_monthly_top_stacked(ret_tags, show=1, top_n=5)
+        self._plot_monthly_top_each_month(ret_tags, show=1, top_per_month=5)
 
         return 0
 
