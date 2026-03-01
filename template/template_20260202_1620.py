@@ -251,6 +251,7 @@ UnderlyingAsset = Literal[
   # EQUITY (index-like exposures; country ignored)
   # ----------------
   'equity_benchmark' ,
+  'equity_vix' ,
 
   # equity_factor{Factor}'
   'equity_factorValue' ,
@@ -259,6 +260,7 @@ UnderlyingAsset = Literal[
   'equity_factorLowVolatility' ,
   'equity_factorDividend' ,
   'equity_factorSize' ,
+  'equity_factorGrowth' ,
 
   # equity_cap{Bucket}'
   'equity_caplarge' ,
@@ -297,6 +299,29 @@ UnderlyingAsset = Literal[
   'fx_myr',
   'fx_inr',
   'fx_krw',
+  'fx_thb',
+  'fx_twd',
+  'fx_try',
+  'fx_idr',
+  'fx_pln',
+  'fx_sek',
+  'fx_dkk',
+  'fx_nok',
+  'fx_zar',
+  'fx_brl',
+  'fx_rub',
+  'fx_mxn',
+  'fx_php',
+  'fx_vnd',
+  'fx_egp',
+  'fx_ils',
+  'fx_sar',
+  'fx_czk',
+  'fx_ars',
+  'fx_clp',
+  'fx_cop',
+  'fx_ron',
+  'fx_huf',
   'fx_other',
 
 
@@ -334,6 +359,39 @@ UnderlyingAsset = Literal[
   'gov_20Y', 
   'gov_30Y', 
   'gov_other',
+  'gov_tips5Y',
+  'gov_tips10Y',
+  'gov_tips30Y',
+  'gov_tipsother',
+
+  # ----------------
+  # CREDIT (non-sovereign / spread products; country handled in `country`)
+  # Starter set (expand freely)
+  # ----------------
+  'credit_ig',
+  'credit_hy',
+  'credit_em',
+  'credit_cds',
+  'credit_mbs',
+  'credit_abs',
+  'credit_cp',
+  'credit_other',
+
+  # ----------------
+  # CRYPTO (major coins/stables; country ALWAYS GLOBAL)
+  # Starter set (expand freely)
+  # ----------------
+  'crypto_btc',
+  'crypto_eth',
+  'crypto_usdt',
+  'crypto_other',
+
+  # ----------------
+  # RATES (non-government rate products; country handled in `country`)
+  # Starter set (expand freely)
+  # ----------------
+  'rates_inflationswap',
+  'rates_other',
   'unclassified', 
   ]
 
@@ -367,7 +425,7 @@ class InstrumentTag(BaseModel):
 
 
 SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
-SCHEMA_VERSION=2026-02-28T00:00:00
+SCHEMA_VERSION=2026-03-01T01:00:00
 You are a strict classification system. Your job is to map each input instrument string into one or more predefined exposure tags.
 
 INPUT:
@@ -387,37 +445,64 @@ FOR EACH item (InstrumentTagBase):
 2) underlying_assets
    - Must be a NON-EMPTY list of allowed tags (UnderlyingAsset).
    - No duplicates in the list.
-   - If unsure, output exactly ["unclassified"].
+   - If unsure, output exactly ["unclassified"] (and NOTHING ELSE). Never mix "unclassified" with other tags.
 3) country
-   - For COMMODITY and FX exposures: ALWAYS "GLOBAL".
+   - For COMMODITY, FX, and CRYPTO exposures: ALWAYS "GLOBAL".
      - If any `cmd_*` tag is present in underlying_assets -> country="GLOBAL".
      - If any `fx_*` tag is present in underlying_assets -> country="GLOBAL".
+     - If any `crypto_*` tag is present in underlying_assets -> country="GLOBAL".
    - Otherwise (non-FX, non-commodity): return an ISO3 country code if you can infer it from the raw string; else "GLOBAL".
      - When GOV/RATES is present (any `gov_*` tag):
        - If the raw string clearly indicates the sovereign/issuer, map to ISO3, else "GLOBAL".
+     - When CREDIT is present (any `credit_*` tag):
+       - If the raw string clearly indicates a country/region issuer (e.g., "US High Yield Bonds", "China HY bonds"), map to ISO3; else "GLOBAL".
      - When EQUITY index / benchmark / sector / factor exposure (not single-stock) is present:
        - If it clearly refers to a single-country index/market, map to ISO3; if global/regional, use "GLOBAL".
 4) ticker
    - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
    - If `equity_stock` IS present: extract best-effort ticker if explicitly present (e.g., "AAPL", "0700.HK", "600519.SS"), else "".
+   - NEVER infer a ticker that is not explicitly present in raw.
 
 CLASSIFICATION RULES (DECISION TREE):
 - FX:
   - Currency names/codes/synonyms -> fx_* (e.g., "USD", "US Dollar", "US Dollar (USD)", "USD (US Dollar)" -> fx_usd).
   - US Dollar Index / DXY -> fx_usd.
   - Currency pair like "USD/JPY" or "USDJPY" -> include BOTH fx_usd and fx_jpy.
-  - Unknown currency -> fx_other.
+  - IMPORTANT: only map to a specific fx_* tag if the currency is unambiguous (exact code like "THB" or a clear name like "Thai Baht").
+    - If the raw is a short all-caps token that is NOT a known currency code, do NOT guess; prefer equity_stock (ticker) or unclassified.
+  - Unknown / ambiguous currency -> fx_other.
 - COMMODITY:
   - Gold/Silver/Oil/Natural gas/etc -> corresponding cmd_* tag; otherwise cmd_other.
   - Ignore spot/future/expiry wrappers.
 - GOV / RATES:
   - If tenor is mentioned, map to gov_1M/3M/6M/1Y/2Y/3Y/5Y/7Y/10Y/20Y/30Y.
   - If it is gov/rates but tenor is unclear -> gov_other.
+  - TIPS / inflation-protected Treasuries:
+    - If tenor is mentioned, map to gov_tips5Y/10Y/30Y.
+    - If TIPS is mentioned but tenor is unclear -> gov_tipsother.
+- RATES (non-government):
+  - Inflation swap / breakeven style strings (e.g., "USD 5Y5Y Inflation Swap", "EUR 5Y5Y Inflation Swap") -> rates_inflation_swap.
+  - Other rate derivatives/benchmarks (if clearly tradable but not a sovereign bond) -> rates_other.
+- CREDIT / SPREAD:
+  - "Investment grade" / "IG" -> credit_ig.
+  - "High yield" / "HY" -> credit_hy.
+  - "Emerging markets" / "EM" credit -> credit_em.
+  - CDS indices like "CDX" / "iTraxx" -> credit_cds.
+  - MBS / CMBS -> credit_mbs.
+  - ABS -> credit_abs.
+  - Commercial paper -> credit_cp.
+  - Otherwise any corporate bond / bond basket / bond index that is NOT clearly sovereign -> credit_other.
 - EQUITY:
   - Broad equity market / index beta exposure -> equity_benchmark.
-  - Factor/style keywords -> equity_factorValue/Momentum/Quality/LowVolatility/Dividend/Size.
+  - VIX / volatility index exposure (e.g., "VIX", "CBOE VIX") -> equity_vix.
+  - Factor/style keywords -> equity_factorValue/Momentum/Quality/LowVolatility/Dividend/Size/Growth.
   - Cap bucket keywords -> equity_caplarge/mid/small.
   - Clear GICS 11 sector -> corresponding equity_sector*.
   - Single company name or explicit ticker -> equity_stock.
+- CRYPTO:
+  - "Bitcoin" / "BTC" -> crypto_btc.
+  - "Ethereum" / "ETH" -> crypto_eth.
+  - "USDT" / "Tether" -> crypto_usdt.
+  - Generic "cryptocurrency/crypto" or other coins -> crypto_other.
 
 """
