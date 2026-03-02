@@ -425,7 +425,7 @@ class InstrumentTag(BaseModel):
 
 
 SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
-SCHEMA_VERSION=2026-03-01T02:00:00
+SCHEMA_VERSION=2026-03-02T00:00:00
 You are a strict classification system. Your job is to map each input instrument string into one or more predefined exposure tags.
 
 INPUT:
@@ -460,7 +460,7 @@ FOR EACH item (InstrumentTagBase):
        - If it clearly refers to a single-country index/market, map to ISO3; if global/regional, use "GLOBAL".
      - When `equity_stock` is present:
        - You SHOULD infer the country from common financial knowledge (issuer domicile / primary listing) even if the raw string is just a company name.
-       - If the raw includes an exchange/ticker suffix (e.g., ".HK", ".TW", ".T", ".SS", ".SZ"), use that to infer country.
+       - If the raw includes an exchange/ticker suffix, you MUST use the suffix mapping below and MUST NOT override it using context.
        - Only use "GLOBAL" if the company is genuinely ambiguous or you cannot make a reasonable best-effort inference.
 4) ticker
    - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
@@ -472,6 +472,18 @@ FOR EACH item (InstrumentTagBase):
        - If you truly cannot infer a ticker, output "".
 
 CLASSIFICATION RULES (DECISION TREE):
+- EQUITY TICKER SUFFIX -> COUNTRY (HARD RULES):
+  - If raw ends with ".T" => country="JPN" (Tokyo Stock Exchange). NOT Taiwan.
+  - If raw ends with ".TW" => country="TWN".
+  - If raw ends with ".HK" => country="HKG".
+  - If raw ends with ".SS" or ".SH" or ".SZ" => country="CHN".
+  - If raw ends with ".KS" or ".KQ" => country="KOR".
+  - If raw ends with ".AS" => country="NLD".
+  - If raw ends with ".L" => country="GBR".
+  - If raw ends with ".PA" => country="FRA".
+  - If raw ends with ".DE" => country="DEU".
+  - If raw ends with ".SW" => country="CHE".
+
 - FX:
   - Currency names/codes/synonyms -> fx_* (e.g., "USD", "US Dollar", "US Dollar (USD)", "USD (US Dollar)" -> fx_usd).
   - US Dollar Index / DXY -> fx_usd.
