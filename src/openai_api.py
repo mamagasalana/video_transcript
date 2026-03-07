@@ -4,17 +4,18 @@ from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 from src.openai_usage_tracker import TOKEN_CAP, UsageTracker
 from src.openai_schema_tracker import FolderSchemaTracker
 from src.normalize_transcript import NormFinder
+from src.iterclass import BatchItem
+
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from tqdm import tqdm
-import glob
+
 import re
 import os
 import json
-import hashlib
+
 
 from typing_extensions import override
-from dataclasses import dataclass
 from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
 import time
 import asyncio
@@ -24,22 +25,8 @@ SEED  = 12345
 
 nf = NormFinder('')
 
-@dataclass(frozen=True)
-class BatchItem:
-    id: str
-    text: str
-    helper: Optional[str] = None
-
 
 BatchInputs = Union[Iterable[Tuple[str, str]], Iterable[BatchItem]]
-
-
-def texts_to_items(texts: Iterable[str]) -> Iterator[BatchItem]:
-    for text in texts:
-        text_str = str(text)
-        text_hash = hashlib.sha1(text_str.encode("utf-8")).hexdigest()
-        yield BatchItem(id=text_hash, text=text_str)
-
 
 def iter_batch_items(inputs: BatchInputs) -> Iterator[BatchItem]:
     for item in inputs:
@@ -57,6 +44,7 @@ def iter_batch_items(inputs: BatchInputs) -> Iterator[BatchItem]:
         raise TypeError(
             "inputs must be an iterable of BatchItem or (id: str, text: str) tuples"
         )
+
 
 
 def _format_blocks(blocks: Sequence[Tuple[str, str]]) -> str:
@@ -137,38 +125,6 @@ class OPENAI_API:
             "total_tokens": usage.get("total_tokens", 0),
             'time_spent': time_spent,
         }
-
-    def _iter_items_from_glob(self, glob_pattern: Optional[str]) -> Iterator[BatchItem]:
-        if glob_pattern:
-            transcript_files = sorted(glob.glob(glob_pattern))
-        else:
-            transcript_files = sorted(glob.glob('transcript2/*.txt'))
-
-        for transcript_file in transcript_files:
-            dt = os.path.basename(transcript_file).split('.')[0]
-            with open(transcript_file, 'r') as ifile:
-                transcript = ifile.read()
-            yield BatchItem(id=dt, text=transcript)
-
-    def iter_items_from_glob(self, glob_pattern: Optional[str]) -> Iterator[BatchItem]:
-        return self._iter_items_from_glob(glob_pattern)
-
-    def _iter_items_from_glob_with_helper(
-        self, glob_pattern: Optional[str], helper_folder: str
-    ) -> Iterator[BatchItem]:
-        for item in self._iter_items_from_glob(glob_pattern):
-            support_file = glob.glob(
-                os.path.join('outputs/model_output', helper_folder, f'{item.id}*')
-            )
-            assert support_file, "Support file not found"
-            with open(support_file[0], 'r') as ifile:
-                support = ifile.read()
-            yield BatchItem(id=item.id, text=item.text, helper=support)
-
-    def iter_items_from_glob_with_helper(
-        self, glob_pattern: Optional[str], helper_folder: str
-    ) -> Iterator[BatchItem]:
-        return self._iter_items_from_glob_with_helper(glob_pattern, helper_folder)
 
     def run_batch(self, inputs: BatchInputs, token_cap=TOKEN_CAP, force=False):
         ustrack = UsageTracker(model=self.model, cap=token_cap)
