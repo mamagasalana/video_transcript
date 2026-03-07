@@ -297,6 +297,8 @@ class OPENAI_API:
 
             results = []
             errors = []
+            if not tasks:
+                return
             pbar = tqdm(tasks, desc="Extracting", unit="doc")
             for task in asyncio.as_completed(tasks):
                 try:

@@ -115,7 +115,8 @@ class Visualizer:
                             raw_by_date[date_str].add(raw_inst)
                             norm2raw[norm_inst].add(raw_inst)
                             raw2norm[raw_inst].add(norm_inst)
-                            final_by_date[date_str].update(classification_map[norm_inst])
+                            if norm_inst in classification_map:
+                                final_by_date[date_str].update(classification_map[norm_inst])
 
         retfinal =  {'norm2raw': norm2raw, 
                     'raw2norm':  raw2norm, 
