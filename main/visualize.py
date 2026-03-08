@@ -77,7 +77,7 @@ class Visualizer:
 
         classification_map = {}
         classifications = []
-        for f in glob.glob('outputs/model_output/class1_deepseek-reasoner/*'):
+        for f in glob.glob('outputs/model_output/class3_deepseek-reasoner/*'):
             js = json.load(open(f, 'r'))
             classifications.extend(js['instruments'])
         for x in classifications:

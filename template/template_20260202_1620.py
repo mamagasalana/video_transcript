@@ -9,145 +9,102 @@ from typing import Dict, List, Optional, Literal, Annotated
 2. 添加了主持人风格
 """
 field_id_deepseek = Field(..., ge=1, description="从1开始递增的分段编号")
-field_trading_window = Field(
-    ...,
-    description=(
-        "交易窗口判断规则（严格按优先级）：\n"
-        "1. 明确时间词：'明天/下周/这几天'→short_term，'本月/本季/年底/几个月'→medium_term，'今年/长期/未来几年'→long_term\n"
-        "2. 技术分析提及'关键价位突破'：通常为medium_term\n"
-        "3. 无时间信息但有多维度分析：默认为medium_term（主持人布局周期）\n"
-        "4. 事件驱动：'财报/选举/会议'→event_window\n"
-        "5. 仅现象描述或无分析：unknown\n"
-        "注意：已发生的具体历史时间点（如'昨晚10点半'）不能作为未来交易窗口依据"
-    )
-)
 
+Intent = Literal["open_buy", "open_sell", "close_buy", "close_sell", "unclear", "invalid"]
 
-field_intent_deepseek = Field(
-    ...,
-    description=(
-        "**注意：以下判断规则必须严格遵守**\n\n"
-        "基于布局型主持人风格判断（严格决策树）：\n"
-        "Step1: 检查是否为举例说明\n"
-        "  - 关键词检测：'比如说'、'就像'、'连...都...'、'你看'、'举个例子'\n"
-        "  - 上下文检测：是否用于说明其他概念而非分析该标的\n"
-        "  → 是，则必须设为unclear\n\n"
-        "Step2: 统计分析维度（必须≥2个同向维度）\n"
-        "  - 有效维度：技术面、基本面、资金面、宏观面、情绪面、事件面\n"
-        "  - 仅价格描述（如'暴涨'、'暴跌'）不算分析维度\n"
-        "  - ≥2个同向维度 → implicit\n"
-        "  - 1个维度或矛盾维度 → unclear\n\n"
-        "Step3: 检查可执行参考点（必须面向未来）\n"
-        "  - 有效：具体价位、具体条件、具体时间框架\n"
-        "  - 无效：已发生的具体历史时间点\n\n"
-        "Step4: 检查否定表述\n"
-        "  - 明确'不建议'、'不是叫你去玩' → unclear\n"
-        "  - 讽刺性表述（表面看涨实则看空）→ 识别真实意图\n\n"
-        "explicit: 明确使用'买/卖/做多/做空'等动词且无否定\n"
-        "implicit: 无交易动词但满足上述Step1-4所有条件\n"
-        "unclear: 不符合上述任何条件"
-    )
-)
-
-
-field_instrument_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument，直接沿用") )
-field_instrument_normalized_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument_normalized，直接沿用"))
-field_instrument_type_from_helper_deepseek = Field( ..., description=("来自helper.instruments.instrument_type，直接沿用"))
-
-class EvidenceSpan_deepseek4(BaseModel):
-    evidence_id: int = field_id_deepseek
-    evidence_intent: str = Field(
-        ...,
-        min_length=1,
+class TradingSignalBase(BaseModel):
+    instrument: List[str] = Field(..., min_length=1,
         description=(
-            "**注意：必须严格按照以下格式，否则验证失败**\n\n"
-            "结构化证据摘要（必须按以下格式）：\n"
-            "格式：'原文：\"...\"；分析维度：【技术面/基本面/资金面/宏观面/情绪面/事件面】；"
-            "方向：【偏多/偏空/中性】；主持人意图：【分析/举例/警示/推荐】；"
-            "举例检测：【是/否，如是为辅助说明什么概念】'\n\n"
-            "示例：'原文：\"黄金白银为什么喷出，到为什么急速的修正拉回，甚至要泡沫破灭\"；"
-            "分析维度：【技术面】；方向：【偏空】；主持人意图：【分析】；举例检测：【否】'"
-        )
+            "必须精确复制 Helper 中对应项的 instrument 列表，用于和 helper 建立一一对应关系。"
+            "列表中的每一项都是同一标的在 Transcript 中可能出现的别名或写法。"
+            "不得新增、删减、改写、翻译或重新排序；输出时应直接沿用 Helper 原始列表。"
+        ),
     )
-    evidence_trading_window: str = Field(
-        ...,
-        min_length=1,
+    instrument_normalized: str = Field(..., min_length=1,
         description=(
-            "**注意：必须严格按照以下格式，否则验证失败**\n\n"
-            "结构化时间窗口摘要（必须按以下格式）：\n"
-            "格式：'时间依据：\"...\"；判断：short_term/medium_term/long_term/event_window/unknown；理由：...'\n\n"
-            "示例：'时间依据：\"年底可能有一波变化\"；判断：medium_term；理由：主持人提及年底变化窗口'"
-        )
+            "必须精确复制 Helper 中对应项的 instrument_normalized 字段；"
+            "该字段是该标的的唯一标准化标识，例如 cmd_gold / fx_usd。"
+            "若 Helper 提供的是标准化名称，则直接沿用，不得自行重写。"
+        ),
+    )
+    intent: Intent = Field(...,
+        description=(
+            "交易意图枚举，仅可填写：open_buy / open_sell / close_buy / close_sell / unclear / invalid。"
+            "open_buy：主持人对该标的给出偏多、偏买入、偏布局的建议或证据，"
+            "通常体现为买低卖高的逆向/价值思路，而不是追涨。"
+            "open_sell：与 open_buy 相反；主持人对该标的给出偏空、偏卖出、偏做空的建议或证据。"
+            "close_buy：主持人针对多头方向提示风险、提醒不要追、建议先观望/减仓/止盈/不再继续做多。"
+            "close_sell：与 close_buy 相反；主持人针对空头方向提示风险、建议回补/离场/不再继续做空。"
+            "unclear：主持人只是提到该标的、描述现象、陈述涨跌、举例说明、解释机制，"
+            "但没有给出足以支持买入或卖出的建议性证据。"
+            "invalid：Helper 给出的对象并非可交易标的，或在当前语境下属于错误/无效标的，例如 CPI。"
+            "重要：单纯事实陈述不等于建议；若只有“今天油价大跌”之类描述，通常应判为 unclear。"
+            "若在陈述之后进一步给出支撑理由，并明确形成可执行的布局方向，则可判为 open_buy 或 open_sell。"
+        ),
+    )
+    evidence: List[str] = Field(
+        default_factory=list,
+        description=(
+            "支持 intent 的原文证据列表。每一项都必须是 Transcript 中真实出现过的连续原文子串，"
+            "必须逐字复制，不得改写、翻译、润色、合并自多处内容，也不得凭空生成。"
+            "优先提取完整句子；若句子过长，可提取足以表达含义的连续分句。"
+        ),
+    )
+    summary: List[str] = Field(
+        default_factory=list,
+        description=(
+            "对 evidence 的解释列表。summary[i] 必须说明 evidence[i] 为什么支持当前 intent，"
+            "只能基于对应证据和 Transcript 已明确表达的内容进行说明，不得引入 Transcript 之外的新事实、常识或推断。"
+            "当 evidence 为空时，summary 也应为空。"
+        ),
     )
 
-
-class Intent(str, Enum):
-    OPEN_BUY_IMPLICIT = "open_buy_implicit"
-    OPEN_BUY_EXPLICIT = "open_buy_explicit"
-    OPEN_SELL_IMPLICIT = "open_sell_implicit"
-    OPEN_SELL_EXPLICIT = "open_sell_explicit"
-    CLOSE_BUY = "close_buy"
-    CLOSE_SELL = "close_sell"
-    UNCLEAR = "unclear"
+class TradingSignal(BaseModel):
+    signals: List[TradingSignalBase] = Field(default_factory=list)
 
 
-class TradingWindow(str, Enum):
-    SHORT_TERM = "short_term"
-    MEDIUM_TERM = "medium_term"
-    LONG_TERM = "long_term"
-    EVENT_WINDOW = "event_window"
-    UNKNOWN = "unknown"
-
-
-class AssetClass(str, Enum):
-    STOCK = "stock"
-    FX = "fx"
-    COMMODITY = "commodity"
-    CRYPTO = "crypto"
-    INDEX = "index"
-    BOND = "bond"
-    INVALID = "invalid"
-
-class TradingSignalBase_deepseek4(BaseModel):
-    signal_id: int = field_id_deepseek
-    instrument: str = field_instrument_from_helper_deepseek
-    instrument_normalized: str = field_instrument_normalized_from_helper_deepseek
-    intent: Intent = field_intent_deepseek
-    trading_window: TradingWindow = field_trading_window
-    evidence_ids: List[int] = Field(default_factory=list, description="evidence_id列表")
-    instrument_type: AssetClass = field_instrument_type_from_helper_deepseek
-
-class TRADING_SIGNAL(BaseModel):
-    evidence: List[EvidenceSpan_deepseek4] = Field(default_factory=list)
-    signals: List[TradingSignalBase_deepseek4] = Field(default_factory=list)
-
-
-SCHEMA = r"""
-SCHEMA_VERSION=2026-02-01T10:00:00
+SCHEMA_SIGNAL_EXTRACT = r"""
+SCHEMA_VERSION=2026-03-08T00:00:00
 你是一个中文(普通话)经验丰富的财经分析师，专门分析《金钱报》主持人(杨世光) 的交易信号。
 
 输入:
 - Transcript：完整逐字稿
-- Helper：instruments JSON（已抽取好的 instrument 列表，包含 instrument_id / instrument / instrument_normalized / instrument_type）
+- Helper：instruments JSON（已抽取好的 instrument 列表，至少包含 instrument / instrument_normalized）
 
 目标:
 基于 Transcript，对 Helper 中列出的每一个 instrument 逐一判断其交易意图（intent）并输出交易信号。
-必须覆盖 Helper 的所有 instrument：每个 instrument 都要输出一条 signal（至少 intent=unclear）。
+必须覆盖 Helper 的所有 instrument：每个 helper item 都要输出且只输出一条 signal。
 
 **关键提示（必须遵守）：**
-1. **主持人风格**：杨世光主持人是"布局型"风格，不是"观察型"。提及标的通常带有交易意图，不是单纯描述现象。
-2. **举例检测**：如果标的仅用于举例说明其他概念（关键词："比如说"、"就像"、"连...都..."、"你看"），则 intent 必须为 unclear。
-3. **分析维度**：只有至少2个同向分析维度（技术面、基本面、资金面、宏观面、情绪面、事件面）才能形成 implicit 信号。
-4. **时间窗口**：已发生的具体历史时间点（如"昨晚10点半"）不能作为未来交易窗口依据。
-5. **讽刺语气**：注意识别讽刺性表述（表面看涨实则看空）的真实意图。
+1. **主持人风格**：杨世光主持人偏向"布局型"、"买低卖高"、"不要追价"的风格。不要把他理解成纯粹播报行情的人。
+2. **陈述 vs 建议**：单纯描述事实、涨跌、现象，不等于交易建议。只有当主持人进一步给出支撑理由、风险判断、布局倾向或操作导向时，才可判为 open/close 信号。
+3. **举例检测**：如果标的仅用于举例说明其他概念，则 intent 应优先判为 unclear。
+4. **讽刺语气**：注意识别讽刺或反话（表面看涨实则看空，或表面看空实则提醒风险）的真实意图。
+5. **不追趋势**：如果主持人强调风险、提醒不要追、认为已经涨多/跌深不适合追单，这更接近 close_buy 或 close_sell，而不是 open_*。
 
 核心约束（必须遵守）：
-1) 覆盖性：signals 中必须包含 Helper 的全部 instrument_id；不允许遗漏。
+1) 覆盖性：signals 中必须覆盖 Helper 的全部 helper item；每个 helper item 必须且只能对应一条 signal。
 2) 不新增标的：不得在 signals 中输出 Helper 之外的任何 instrument；不得自行补充未出现于 Helper 的标的。
-3) 以 Transcript 为准：所有 intent 判断只能来自 Transcript 明确表达的内容；不得引入 Transcript 之外的新信息或常识推断。
-4) 先 evidence 后 signals：必须先生成 evidence 列表，再生成 signals 列表；signals 引用的 evidence_id 必须在 evidence 中真实存在。
-5) 去重合并：同一 instrument_id 只输出一条 signal；如 Transcript 多处提及，合并证据到同一条 signal 中。
-6) Helper 优先：instrument 的写法必须与 Helper 的 instrument 字段一致（精确拷贝），用于可追溯；instrument_normalized / instrument_type 也以 Helper 为准（直接沿用）。
+3) Helper 优先：signal 中的 instrument / instrument_normalized 必须直接沿用 Helper 对应字段，不得改写。
+4) 别名匹配：Helper.instrument 是同一标的的别名列表；只要 Transcript 明确提到其中任一别名，都视为命中该 helper item。
+5) 以 Transcript 为准：所有 intent、evidence、summary 判断只能来自 Transcript 明确表达的内容；不得引入 Transcript 之外的新信息。
+6) 证据原文：evidence 的每一项都必须是 Transcript 中真实存在的连续原文子串，必须逐字复制，不得改写、拼接或凭空生成。
+7) 解释约束：summary 的每一项都要解释对应 evidence 为什么支持 intent；summary 可以概括，但不得引入 Transcript 之外的事实。
+8) 配对关系：summary 与 evidence 一一对应；若有 2 条 evidence，则必须有 2 条 summary。若 evidence 为空，则 summary 也应为空。
+9) 合并原则：同一个 helper item 只输出一条 signal；如果 Transcript 多处提及该 item 的多个别名，把相关证据合并到同一条 signal 中。
+
+intent 判定规则：
+- open_buy：主持人对该标的给出偏多、偏买入、偏布局的建议，或给出能支撑做多的理由与判断。
+- open_sell：与 open_buy 相反；主持人对该标的给出偏空、偏卖出、偏做空的建议，或给出能支撑做空的理由与判断。
+- close_buy：主持人对多头方向提示风险，提醒不要追、不要继续加码、应减仓/止盈/先观望，或明确否定继续做多。
+- close_sell：与 close_buy 相反；主持人对空头方向提示风险，提醒回补、离场、不要继续做空。
+- unclear：主持人只是提到该标的、解释背景、陈述价格变化、做类比、做举例，或证据不足以形成可执行建议。
+- invalid：Helper 给出的对象不是可交易标的，或明显是错误对象，例如 CPI。
+
+重要区分：
+- “今天油价大跌了”这类话，通常只是陈述现象，不能直接判定为 open_buy 或 open_sell，应优先判为 unclear。
+- “玉米价格很低，这是现象；但库存低、墨西哥供应受扰，所以这是布局买点”这类结构，前半句是陈述，后半句是支持 open_buy 的证据。
+- 只要主持人给出单一但清晰、可执行、带方向的支持理由，也可以判为 open_buy 或 open_sell；不要求必须有多个理由。
 """
 
 

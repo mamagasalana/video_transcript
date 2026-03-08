@@ -15,6 +15,11 @@ def texts_to_items(texts: Iterable[str]) -> Iterator[BatchItem]:
         text_hash = hashlib.sha1(text_str.encode("utf-8")).hexdigest()
         yield BatchItem(id=text_hash, text=text_str)
 
+def texts_to_items2(texts: Iterable[str], ids: Iterable[str] ) -> Iterator[BatchItem]:
+    for text, _id in zip(texts, ids):
+        text_str = str(text)
+        yield BatchItem(id=_id, text=text_str)
+
 def iter_items_from_files(iterables: Iterable[str] =None) -> Iterator[BatchItem]:
     if iterables is not None:
         transcript_files = sorted(iterables)
