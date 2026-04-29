@@ -269,6 +269,7 @@ class OPENAI_API:
         force: bool = False,
         max_workers: int = 20,
         raise_on_error: bool = True,
+        show_progress: bool = True,
     ):
         async def _runner():
             ustrack = UsageTracker(model=self.model, cap=TOKEN_CAP)
@@ -299,25 +300,29 @@ class OPENAI_API:
             errors = []
             if not tasks:
                 return
-            pbar = tqdm(tasks, desc="Extracting", unit="doc")
+            pbar = tqdm(tasks, desc="Extracting", unit="doc") if show_progress else None
             for task in asyncio.as_completed(tasks):
                 try:
                     result = await task
                     results.append(result)
-                    pbar.update(1)
-                    pbar.set_postfix({
-                        "used": result.get("used", 0),
-                        "spent": result.get("spent", 0),
-                        "status": "skipped" if result.get("skipped") else "ok",
-                    })
+                    if pbar is not None:
+                        pbar.update(1)
+                        pbar.set_postfix({
+                            "used": result.get("used", 0),
+                            "spent": result.get("spent", 0),
+                            "status": "skipped" if result.get("skipped") else "ok",
+                        })
                 except Exception as exc:
                     errors.append(exc)
-                    pbar.update(1)
-                    pbar.set_postfix({"status": "error"})
+                    if pbar is not None:
+                        pbar.update(1)
+                        pbar.set_postfix({"status": "error"})
                     if raise_on_error:
-                        pbar.close()
+                        if pbar is not None:
+                            pbar.close()
                         raise
-            pbar.close()
+            if pbar is not None:
+                pbar.close()
 
             if errors and raise_on_error:
                 raise errors[0]

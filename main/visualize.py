@@ -13,9 +13,10 @@ from matplotlib import font_manager, rcParams  # type: ignore[import-not-found]
 OUT_FOLDER = "outputs/viz"
 
 class Visualizer:
-    def __init__(self, out_folder: str = OUT_FOLDER) -> None:
+    def __init__(self, out_folder: str = OUT_FOLDER, model: str = 'deepseek-v4-flash') -> None:
         self.out_folder = out_folder
         os.makedirs(self.out_folder, exist_ok=True)
+        self.model = model
 
     def distinct_hex_colors(self, n: int):
         out = []
@@ -68,8 +69,8 @@ class Visualizer:
         return None
 
 
-    def load_outputs(self) :
-        glob_template = "outputs/model_output/2026_02_14_t2_{batch}_deepseek-reasoner/*"
+    def load_outputs(self, prefix='2026_02_14_t2') :
+        glob_template = "outputs/model_output/%s_{batch}_%s/*" % (prefix, self.model)
         raw_by_date = defaultdict(set)  # date_str -> {raw_instrument}
         final_by_date = defaultdict(set)  # date_str -> {raw_instrument}
         norm2raw = defaultdict(set)  # normalized -> {raw}
@@ -77,7 +78,7 @@ class Visualizer:
 
         classification_map = {}
         classifications = []
-        for f in glob.glob('outputs/model_output/class3_deepseek-reasoner/*'):
+        for f in glob.glob(f'outputs/model_output/class3_{self.model}/*'):
             js = json.load(open(f, 'r'))
             classifications.extend(js['instruments'])
         for x in classifications:

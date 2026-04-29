@@ -3,3 +3,5 @@ faster-whisper
 openai
 tiktoken
 plotly
+matplotlib
+plotly
