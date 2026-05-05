@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import glob
 import os
 
-from src.iterclass import iter_items_from_files
+from src.mq_iterclass import iter_items_from_files
 from src.openai_api import OPENAI_API_DEEPSEEK
 from template.template_20260424_2026 import (
     SCHEMA_INSTRUMENT_RULES_EXTRACT as schema,

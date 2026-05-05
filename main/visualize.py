@@ -1,29 +1,19 @@
-import json
-import re
 import os
 from collections import defaultdict, Counter
-import glob
 from typing import Optional
 import plotly.graph_objects as go  # type: ignore[import-not-found]
 import colorsys
 import matplotlib.pyplot as plt  # type: ignore[import-not-found]
 from matplotlib import font_manager, rcParams  # type: ignore[import-not-found]
-from opencc import OpenCC
+from src.mq_tag_summary import get_tag_summary
 
-to_simplified = OpenCC("t2s") 
+
 OUT_FOLDER = "outputs/viz"
 
 class Visualizer:
-    def __init__(
-        self,
-        out_folder: str = OUT_FOLDER,
-        model: str = 'deepseek-v4-flash',
-        classification_prefix: str = 'class3',
-    ) -> None:
+    def __init__( self, out_folder: str = OUT_FOLDER,):
         self.out_folder = out_folder
         os.makedirs(self.out_folder, exist_ok=True)
-        self.model = model
-        self.classification_prefix = classification_prefix
 
     def distinct_hex_colors(self, n: int):
         out = []
@@ -74,71 +64,6 @@ class Visualizer:
             return chosen
 
         return None
-
-
-    def load_outputs(self, prefix='2026_02_14_t2') :
-        glob_template = "outputs/model_output/%s_{batch}_%s/*" % (prefix, self.model)
-        raw_by_date = defaultdict(set)  # date_str -> {raw_instrument}
-        final_by_date = defaultdict(set)  # date_str -> {raw_instrument}
-        norm2raw = defaultdict(set)  # normalized -> {raw}
-        raw2norm = defaultdict(set)  # raw -> {normalized} (set size <= 1)
-
-        classification_map = {}
-        classifications = []
-        for f in glob.glob(f'outputs/model_output/{self.classification_prefix}_{self.model}/*'):
-            js = json.load(open(f, 'r'))
-            try:
-                classifications.extend(js['instruments'])
-            except:
-                os.remove(f)
-                print('removed %s' % f)
-                continue
-        for x in classifications:
-            norm_inst =  to_simplified.convert(x['raw'])
-            tmp = []
-            country = '_%s' % x['country']
-            if country == '_GLOBAL':
-                country = ''
-            ticker = x['ticker']
-            if ticker:
-                ticker  = '_%s' % ticker
-            
-            for ua in x['underlying_assets']:
-                if len(x['underlying_assets']) ==2:
-                    if ua == 'fx_usd':
-                        continue
-                tmp.append('%s%s%s' % (ua, country, ticker))
-            classification_map[norm_inst] = tmp.copy()
-            
-
-
-        for batch in range(3):
-            pattern = glob_template.format(batch=batch)
-            for f in sorted(glob.glob(pattern)):
-                f2 = os.path.basename(f)
-                date_str = re.findall(r'\d+', f2)[0]
-                # Use utf-8-sig to tolerate UTF-8 BOM in upstream files.
-                with open(f, "r", encoding="utf-8-sig") as fp:
-                    jsrows = json.load(fp)["instruments"]
-                    for js in jsrows:
-                        raw_inst = js['instrument']
-                        norm_inst = to_simplified.convert( js['instrument_normalized'])
-                        norm2raw[norm_inst].add(raw_inst)
-                        raw2norm[raw_inst].add(norm_inst)
-                        # if raw_inst != norm_inst:
-                        #     raw_by_date[date_str].add(raw_inst)
-                        #     norm2raw[norm_inst].add(raw_inst)
-                        #     raw2norm[raw_inst].add(norm_inst)
-                        #     if norm_inst in classification_map:
-                        #         final_by_date[date_str].update(classification_map[norm_inst])
-
-        retfinal =  {'norm2raw': norm2raw, 
-                    'raw2norm':  raw2norm, 
-                    'raw_by_date': raw_by_date, 
-                    'final_by_date': final_by_date,
-                    'classification_map': classification_map,}
-        return retfinal
-
 
     def _plot_monthly_top_each_month(
         self,
@@ -232,12 +157,21 @@ class Visualizer:
             plt.close("all")
 
 
-    def main(self):
-        ret_tags = self.load_outputs()['final_by_date']
+    def main(
+        self,
+        prefix='2026_04_24_t0',
+        model='deepseek-v4-flash',
+        classification_prefix='class4',
+        batches=range(3),
+    ):
+        ret =  get_tag_summary(
+            prefix=prefix,
+            model=model,
+            classification_prefix=classification_prefix,
+            batches=batches)
+        ret_tags = ret['final_by_date']
         self._plot_ret2(ret_tags, show=1, top_n=10)
         self._plot_monthly_top_each_month(ret_tags, show=1, top_per_month=5)
-
-
 
 
 if __name__ == "__main__":

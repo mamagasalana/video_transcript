@@ -4,7 +4,7 @@ from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 from src.openai_usage_tracker import TOKEN_CAP, UsageTracker
 from src.openai_schema_tracker import FolderSchemaTracker
 from src.normalize_transcript import NormFinder
-from src.iterclass import BatchItem
+from src.mq_iterclass import BatchItem
 
 from dotenv import load_dotenv
 from pydantic import BaseModel

@@ -1,5 +1,6 @@
-from main.visualize import main, load_outputs
-ret = load_outputs(debug=True)
+from main.visualize import main
+from src.mq_tag_summary import get_tag_summary
+ret = get_tag_summary(debug=True)
 
 main_keys = []
 raw_cluster = []
