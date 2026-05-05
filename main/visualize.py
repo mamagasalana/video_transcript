@@ -8,15 +8,22 @@ import plotly.graph_objects as go  # type: ignore[import-not-found]
 import colorsys
 import matplotlib.pyplot as plt  # type: ignore[import-not-found]
 from matplotlib import font_manager, rcParams  # type: ignore[import-not-found]
+from opencc import OpenCC
 
-
+to_simplified = OpenCC("t2s") 
 OUT_FOLDER = "outputs/viz"
 
 class Visualizer:
-    def __init__(self, out_folder: str = OUT_FOLDER, model: str = 'deepseek-v4-flash') -> None:
+    def __init__(
+        self,
+        out_folder: str = OUT_FOLDER,
+        model: str = 'deepseek-v4-flash',
+        classification_prefix: str = 'class3',
+    ) -> None:
         self.out_folder = out_folder
         os.makedirs(self.out_folder, exist_ok=True)
         self.model = model
+        self.classification_prefix = classification_prefix
 
     def distinct_hex_colors(self, n: int):
         out = []
@@ -78,11 +85,16 @@ class Visualizer:
 
         classification_map = {}
         classifications = []
-        for f in glob.glob(f'outputs/model_output/class3_{self.model}/*'):
+        for f in glob.glob(f'outputs/model_output/{self.classification_prefix}_{self.model}/*'):
             js = json.load(open(f, 'r'))
-            classifications.extend(js['instruments'])
+            try:
+                classifications.extend(js['instruments'])
+            except:
+                os.remove(f)
+                print('removed %s' % f)
+                continue
         for x in classifications:
-            norm_inst =  x['raw']
+            norm_inst =  to_simplified.convert(x['raw'])
             tmp = []
             country = '_%s' % x['country']
             if country == '_GLOBAL':
@@ -110,14 +122,15 @@ class Visualizer:
                     jsrows = json.load(fp)["instruments"]
                     for js in jsrows:
                         raw_inst = js['instrument']
-                        norm_inst = js['instrument_normalized']
-                        
-                        if raw_inst != norm_inst:
-                            raw_by_date[date_str].add(raw_inst)
-                            norm2raw[norm_inst].add(raw_inst)
-                            raw2norm[raw_inst].add(norm_inst)
-                            if norm_inst in classification_map:
-                                final_by_date[date_str].update(classification_map[norm_inst])
+                        norm_inst = to_simplified.convert( js['instrument_normalized'])
+                        norm2raw[norm_inst].add(raw_inst)
+                        raw2norm[raw_inst].add(norm_inst)
+                        # if raw_inst != norm_inst:
+                        #     raw_by_date[date_str].add(raw_inst)
+                        #     norm2raw[norm_inst].add(raw_inst)
+                        #     raw2norm[raw_inst].add(norm_inst)
+                        #     if norm_inst in classification_map:
+                        #         final_by_date[date_str].update(classification_map[norm_inst])
 
         retfinal =  {'norm2raw': norm2raw, 
                     'raw2norm':  raw2norm, 

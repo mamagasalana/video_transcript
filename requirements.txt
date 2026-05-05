@@ -4,4 +4,3 @@ openai
 tiktoken
 plotly
 matplotlib
-plotly

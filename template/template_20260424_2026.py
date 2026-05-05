@@ -433,23 +433,34 @@ class InstrumentTag(BaseModel):
 
 
 SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
-SCHEMA_VERSION=2026-03-02T00:00:00
-You are a strict classification system. Your job is to map each input instrument string into one or more predefined exposure tags.
+SCHEMA_VERSION=2026-05-05T00:00:00
+You are a strict classification system. Your job is to map each input instrument into one or more predefined exposure tags.
 
 INPUT:
-- The user provides a LIST of strings (it may look like JSON: ["...","..."] or like a Python list).
-- Treat EACH element as one item to classify.
+- The user provides a LIST of JSON objects.
+- Treat EACH object as one item to classify.
 - Do NOT deduplicate.
 - Preserve order.
+- Each object contains:
+  - `instrument_normalized`: my current normalized instrument name. This is the MAIN identity you should classify.
+  - `aliases`: a list of raw transcript aliases / noisy Automatic Speech Recognition (ASR) variants that were mapped to this normalized name.
+- The aliases are supporting context only. They help you understand the normalized instrument, but they are NOT separate items to classify.
+- Your task is to fit my tag taxonomy to the `instrument_normalized`, using `aliases` only to validate or disambiguate it.
+- Start from `instrument_normalized` as the default anchor.
+- If `instrument_normalized` is already a clear canonical instrument, classify that instrument directly.
+- If `instrument_normalized` is broad / noisy / slightly wrong, use the aliases to infer the most reasonable exposure for that normalized bucket.
+- If the aliases are mixed, weak, or contradictory, prefer conservative classification. If you cannot confidently map it, output exactly ["unclassified"].
+- Do NOT classify each alias separately.
+- Do NOT output the aliases.
 
 OUTPUT (STRICT):
 - Output ONLY valid JSON. No markdown. No commentary.
 - The output MUST validate against the provided Pydantic/JSON Schema (the caller enforces it).
-- Populate `InstrumentTag.instruments` with EXACTLY N items where N == number of input strings.
+- Populate `InstrumentTag.instruments` with EXACTLY N items where N == number of input objects.
 
 FOR EACH item (InstrumentTagBase):
 1) raw
-   - Must equal the original input string EXACTLY (no rewriting, no trimming, no normalization).
+   - Must equal the input `instrument_normalized` EXACTLY (no rewriting, no trimming, no further normalization).
 2) underlying_assets
    - Must be a NON-EMPTY list of allowed tags (UnderlyingAsset).
    - No duplicates in the list.
@@ -473,11 +484,18 @@ FOR EACH item (InstrumentTagBase):
 4) ticker
    - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
    - If `equity_stock` IS present:
-     - If an explicit ticker is present in raw (e.g., "AAPL", "0700.HK", "600519.SS"), copy it.
-     - Otherwise, you SHOULD infer the most representative ticker from common financial knowledge.
-       - Prefer the primary / most-liquid listing ticker (not an ADR) unless the raw explicitly indicates the ADR or US listing.
-       - If multiple tickers are plausible, choose the most common primary listing used in news/quotes; do not output multiple tickers.
-       - If you truly cannot infer a ticker, output "".
+      - If an explicit ticker is present in raw (e.g., "AAPL", "0700.HK", "600519.SS"), copy it.
+      - Otherwise, you SHOULD infer the most representative ticker from common financial knowledge.
+        - Prefer the primary / most-liquid listing ticker (not an ADR) unless the raw explicitly indicates the ADR or US listing.
+        - If multiple tickers are plausible, choose the most common primary listing used in news/quotes; do not output multiple tickers.
+        - If you truly cannot infer a ticker, output "".
+
+IMPORTANT PRIORITY RULES:
+- `instrument_normalized` is the main thing being classified.
+- `aliases` are context for validation and disambiguation.
+- If a weak alias is ambiguous by itself (for example “10年”, “原油”, “半导体”, “A股”), do NOT classify from that alias alone; rely on the normalized instrument plus the overall alias set.
+- If the aliases strongly contradict the normalized instrument, classify the most reasonable exposure implied by the combined evidence, but still keep `raw` equal to the input `instrument_normalized`.
+- The goal is stable tagging for my normalized buckets, not transcript re-extraction.
 
 CLASSIFICATION RULES (DECISION TREE):
 - EQUITY TICKER SUFFIX -> COUNTRY (HARD RULES):
