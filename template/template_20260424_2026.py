@@ -256,41 +256,103 @@ class TradingInstrument(BaseModel):
 
 UnderlyingAsset = Literal[
   # ----------------
-  # EQUITY (index-like exposures; country ignored)
+  # EQUITY
   # ----------------
   'equity_benchmark' ,
-  'equity_vix' ,
+  'equity_volatility' ,
 
-  # equity_factor{Factor}'
+  # equity_factor{Factor}
   'equity_factorValue' ,
   'equity_factorMomentum' ,
   'equity_factorQuality' ,
   'equity_factorLowVolatility' ,
   'equity_factorDividend' ,
+  'equity_factorBeta' ,
+  'equity_factorCyclical' ,
+  'equity_factorLiquidity' ,
   'equity_factorSize' ,
   'equity_factorGrowth' ,
+  'equity_factorDefensive' ,    # 新增：防御型风格（低风险、稳定、高股息等）
+  'equity_factorUndefined' ,    # 新增：明确是风格因子但不在上述列表中的标的
 
-  # equity_cap{Bucket}'
+  # equity_cap{Bucket}
+  'equity_capmega' ,
   'equity_caplarge' ,
   'equity_capmid' ,
   'equity_capsmall' ,
 
-  # equity_sector{GICS 11}'
-  'equity_sectorCommunicationServices' ,
-  'equity_sectorConsumerDiscretionary' ,
-  'equity_sectorConsumerStaples' ,
-  'equity_sectorEnergy' ,
-  'equity_sectorFinancials' ,
-  'equity_sectorHealthCare' ,
-  'equity_sectorIndustrials' ,
-  'equity_sectorInformationTechnology' ,
-  'equity_sectorMaterials' ,
-  'equity_sectorRealEstate' ,
-  'equity_sectorUtilities' ,
+  # ============================================================
+  # equity_sector{GICS 一级 / 二级行业组}
+  # 规则：能明确落到二级行业组时优先用二级；否则回退到一级行业
+  # ============================================================
+  # 10 — 能源
+  'equity_sector11Energy',                    # GICS 11: Energy 能源
 
+  # 15 — 材料
+  'equity_sector11Materials',                 # GICS 11: Materials 材料
+
+  # 20 — 工业
+  'equity_sector11Industrials',               # GICS 11: Industrials 工业
+  # 二级 (3个)
+  'equity_sector25CapitalGoods',              # GICS 25: 2010 Capital Goods 资本品
+  'equity_sector25CommercialProfessionalServices', # GICS 25: 2020 Commercial & Professional Services 商业和专业服务
+  'equity_sector25Transportation',            # GICS 25: 2030 Transportation 运输
+
+  # 25 — 非必需消费品
+  'equity_sector11ConsumerDiscretionary',     # GICS 11: Consumer Discretionary 非必需消费品
+  # 二级 (4个)
+  'equity_sector25AutomobilesComponents',     # GICS 25: 2510 Automobiles & Components 汽车与零部件
+  'equity_sector25ConsumerDurablesApparel',   # GICS 25: 2520 Consumer Durables & Apparel 耐用消费品与服装
+  'equity_sector25ConsumerServices',          # GICS 25: 2530 Consumer Services 消费者服务
+  'equity_sector25ConsumerDiscretionaryDistributionRetail', # GICS 25: 2550 Consumer Discretionary Distribution & Retail 非必需消费品分销与零售
+
+  # 30 — 必需消费品
+  'equity_sector11ConsumerStaples',           # GICS 11: Consumer Staples 必需消费品
+  # 二级 (3个)
+  'equity_sector25ConsumerStaplesDistributionRetail', # GICS 25: 3010 Consumer Staples Distribution & Retail 必需消费品分销与零售
+  'equity_sector25FoodBeverageTobacco',       # GICS 25: 3020 Food, Beverage & Tobacco 食品、饮料与烟草
+  'equity_sector25HouseholdPersonalProducts', # GICS 25: 3030 Household & Personal Products 家庭与个人用品
+
+  # 35 — 医疗保健
+  'equity_sector11HealthCare',                # GICS 11: Health Care 医疗保健
+  # 二级 (2个)
+  'equity_sector25HealthCareEquipmentServices', # GICS 25: 3510 Health Care Equipment & Services 医疗保健设备与服务
+  'equity_sector25PharmaceuticalsBiotechnologyLifeSciences', # GICS 25: 3520 Pharmaceuticals, Biotechnology & Life Sciences 制药、生物科技与生命科学
+
+  # 40 — 金融
+  'equity_sector11Financials',                # GICS 11: Financials 金融
+  # 二级 (3个)
+  'equity_sector25Banks',                     # GICS 25: 4010 Banks 银行
+  'equity_sector25FinancialServices',         # GICS 25: 4020 Financial Services 金融服务（含资本市场、消费金融等）
+  'equity_sector25Insurance',                 # GICS 25: 4030 Insurance 保险
+
+  # 45 — 信息技术
+  'equity_sector11InformationTechnology',     # GICS 11: Information Technology 信息技术
+  # 二级 (3个)
+  'equity_sector25SoftwareServices',          # GICS 25: 4510 Software & Services 软件与服务
+  'equity_sector25TechnologyHardwareEquipment', # GICS 25: 4520 Technology Hardware & Equipment 技术硬件与设备
+  'equity_sector25SemiconductorsSemiconductorEquipment', # GICS 25: 4530 Semiconductors & Semiconductor Equipment 半导体与半导体设备
+
+  # 50 — 通信服务
+  'equity_sector11CommunicationServices',     # GICS 11: Communication Services 通信服务
+  # 二级 (2个)
+  'equity_sector25TelecommunicationServices', # GICS 25: 5010 Telecommunication Services 电信服务
+  'equity_sector25MediaEntertainment',        # GICS 25: 5020 Media & Entertainment 媒体与娱乐
+
+  # 55 — 公用事业
+  'equity_sector11Utilities',                 # GICS 11: Utilities 公用事业
+
+  # 60 — 房地产
+  'equity_sector11RealEstate',                # GICS 11: Real Estate 房地产
+  # 二级 (2个)
+  'equity_sector25EquityREITs',               # GICS 25: 6010 Equity Real Estate Investment Trusts (REITs) 权益型房地产投资信托
+  'equity_sector25RealEstateManagementDevelopment', # GICS 25: 6020 Real Estate Management & Development 房地产管理与开发
+
+  # 兜底
+  'equity_sectorUndefined',                   # 明确属于行业/概念板块，但连一级行业都无法自信映射时使用
   'equity_stock',
   # ----------------'
-  # FX (single-currency groups; baskets map to main currency, e.g. DXY -> fx_usd)'
+  # FX (single-currency groups plus basket/index exposures)'
   # Starter set (expand freely)'
   # ----------------'
   'fx_usd',
@@ -330,6 +392,7 @@ UnderlyingAsset = Literal[
   'fx_cop',
   'fx_ron',
   'fx_huf',
+  'fx_basket',
   'fx_other',
 
 
@@ -404,7 +467,7 @@ UnderlyingAsset = Literal[
   ]
 
 class InstrumentTagBase(BaseModel):
-    raw: str = Field(..., min_length=1, description="输入原文（ask 列表中的字符串），用于可追溯。")
+    raw: str = Field(..., min_length=1, description="输入的 instrument_normalized，作为当前分类对象的可追溯主键。")
 
     underlying_assets: List[UnderlyingAsset] = Field(
         ...,
@@ -420,7 +483,7 @@ class InstrumentTagBase(BaseModel):
 
     country: str = Field(
         ...,
-        description="国家/地区代码 (ISO3) 或GLOBAL。",
+        description="国家代码 (ISO3) 或区域代码（如 GLOBAL / ASIAPAC / EUROPE / LATAM / EMERGING 等）。",
     )
 
     ticker: str = Field(
@@ -431,124 +494,202 @@ class InstrumentTagBase(BaseModel):
 class InstrumentTag(BaseModel):
     instruments: List[InstrumentTagBase] = Field(default_factory=list)
 
-
 SCHEMA_INSTRUMENT_TAG_CLASSIFICATION = r"""
-SCHEMA_VERSION=2026-05-05T00:00:00
-You are a strict classification system. Your job is to map each input instrument into one or more predefined exposure tags.
+SCHEMA_VERSION=2026-05-09T00:00:00
+你是一个严格的分类系统。将每个输入资产映射到预定义敞口标签。
 
-INPUT:
-- The user provides a LIST of JSON objects.
-- Treat EACH object as one item to classify.
-- Do NOT deduplicate.
-- Preserve order.
-- Each object contains:
-  - `instrument_normalized`: my current normalized instrument name. This is the MAIN identity you should classify.
-  - `aliases`: a list of raw transcript aliases / noisy Automatic Speech Recognition (ASR) variants that were mapped to this normalized name.
-- The aliases are supporting context only. They help you understand the normalized instrument, but they are NOT separate items to classify.
-- Your task is to fit my tag taxonomy to the `instrument_normalized`, using `aliases` only to validate or disambiguate it.
-- Start from `instrument_normalized` as the default anchor.
-- If `instrument_normalized` is already a clear canonical instrument, classify that instrument directly.
-- If `instrument_normalized` is broad / noisy / slightly wrong, use the aliases to infer the most reasonable exposure for that normalized bucket.
-- If the aliases are mixed, weak, or contradictory, prefer conservative classification. If you cannot confidently map it, output exactly ["unclassified"].
-- Do NOT classify each alias separately.
-- Do NOT output the aliases.
+背景：
+上游系统从完整的对话转录中抽取了 instrument_normalized，并附带了 aliases（转录中真实出现的词汇）。
+第一步（提取）拥有完整的语境，因此 instrument_normalized 是结合语境标准化后的结果，具有最高信任度。
+aliases 是原始转录片段，可能包含 ASR 瑕疵。第二步（分类）必须首先信任 instrument_normalized，仅在高门槛条件下才用 aliases 修正。
 
-OUTPUT (STRICT):
-- Output ONLY valid JSON. No markdown. No commentary.
-- The output MUST validate against the provided Pydantic/JSON Schema (the caller enforces it).
-- Populate `InstrumentTag.instruments` with EXACTLY N items where N == number of input objects.
+输入：JSON 对象列表，每个包含 instrument_normalized 和 aliases。
+输出：仅输出合法 JSON。instruments 数组与输入等长，每项含 raw, underlying_assets, country, ticker。
 
-FOR EACH item (InstrumentTagBase):
-1) raw
-   - Must equal the input `instrument_normalized` EXACTLY (no rewriting, no trimming, no further normalization).
-2) underlying_assets
-   - Must be a NON-EMPTY list of allowed tags (UnderlyingAsset).
-   - No duplicates in the list.
-   - If unsure, output exactly ["unclassified"] (and NOTHING ELSE). Never mix "unclassified" with other tags.
-3) country
-   - For COMMODITY, FX, and CRYPTO exposures: ALWAYS "GLOBAL".
-     - If any `cmd_*` tag is present in underlying_assets -> country="GLOBAL".
-     - If any `fx_*` tag is present in underlying_assets -> country="GLOBAL".
-     - If any `crypto_*` tag is present in underlying_assets -> country="GLOBAL".
-   - Otherwise (non-FX, non-commodity): return an ISO3 country code if you can infer it from the raw string; else "GLOBAL".
-     - When GOV/RATES is present (any `gov_*` tag):
-       - If the raw string clearly indicates the sovereign/issuer, map to ISO3, else "GLOBAL".
-     - When CREDIT is present (any `credit_*` tag):
-       - If the raw string clearly indicates a country/region issuer (e.g., "US High Yield Bonds", "China HY bonds"), map to ISO3; else "GLOBAL".
-     - When EQUITY index / benchmark / sector / factor exposure (not single-stock) is present:
-       - If it clearly refers to a single-country index/market, map to ISO3; if global/regional, use "GLOBAL".
-     - When `equity_stock` is present:
-       - You SHOULD infer the country from common financial knowledge (issuer domicile / primary listing) even if the raw string is just a company name.
-       - If the raw includes an exchange/ticker suffix, you MUST use the suffix mapping below and MUST NOT override it using context.
-       - Only use "GLOBAL" if the company is genuinely ambiguous or you cannot make a reasonable best-effort inference.
-4) ticker
-   - If `equity_stock` is NOT present in underlying_assets: MUST be "" (empty string).
-   - If `equity_stock` IS present:
-      - If an explicit ticker is present in raw (e.g., "AAPL", "0700.HK", "600519.SS"), copy it.
-      - Otherwise, you SHOULD infer the most representative ticker from common financial knowledge.
-        - Prefer the primary / most-liquid listing ticker (not an ADR) unless the raw explicitly indicates the ADR or US listing.
-        - If multiple tickers are plausible, choose the most common primary listing used in news/quotes; do not output multiple tickers.
-        - If you truly cannot infer a ticker, output "".
+=== 字段规则 ===
+1) raw — 严格等于 instrument_normalized。
+2) underlying_assets — 非空列表，仅含允许的标签。不确定时输出 ["unclassified"]，绝不混用。
+3) country —
+   - 底层含 cmd_* / crypto_* → 强制 "GLOBAL"。
+   - 底层含单一货币 fx_*（不含 fx_basket）→ 强制 "GLOBAL"。
+   - 底层含 fx_basket：country 表示该货币篮子/货币指数的地域范围；单一区域用区域代码，跨区域且无明确主区域时用 "GLOBAL"。
+   - 底层含 gov_*：原始字符串明确主权/发行方 → ISO3，否则 "GLOBAL"。
+   - 底层含 credit_*：原始字符串明确国家/区域发行人 → ISO3，否则 "GLOBAL"。
+   - 底层含非个股权益标签（benchmark/sector/factor/cap/volatility）：
+      · 若 norm 或 aliases 含明确单一国家限定词 → ISO3（如 USA, CHN, JPN）。
+      · 若含区域限定词 → 对应区域代码（见下文区域代码表及映射提示）。
+      · 若底层为 equity_volatility，country 表示其所对应股票市场的暴露地域，而非产品上市地；例如 VIX / VXX / UVXY → USA，VHSI / VHSCEI → HKG。
+      · 若属于成熟且广泛认知的国家级市场基准、市场基准简称，或其直接 ETF 代理（如 S&P 500, NASDAQ 100, Dow Jones, Nikkei 225, Hang Seng, 沪深300, SPY, IVV, VOO, QQQ），即使字符串未显式写出国家，也允许基于金融常识推断其对应 country。
+      · 若属于成熟且广泛认知的单一国家超大市值龙头篮子/巨头组合（如 Magnificent 7 / 美股七巨头 / 美国科技七巨头 / FAANG），即使字符串未显式写出国家，也允许基于金融常识推断其对应 country（通常为 USA）。
+      · 以上皆无 → "GLOBAL"。不得仅因 instrument_normalized / aliases 使用中文、普通话或其他本地语言，就把泛行业词、泛市场词或泛资产词默认推断为该语言对应国家；例如“电力”“半导体”“消费”“银行”不能仅因是中文就默认判为 CHN。
+   - 底层含 equity_stock：优先按后缀硬规则映射；若明确为 ADR / DR 等跨境存托凭证，country 填发行主体原属国家/主要业务归属，而非存托凭证上市地；其余无后缀则按金融常识推断主要上市地 ISO3；推断不出则 "GLOBAL"。
+4) ticker —
+   - 无 equity_stock → ""。
+   - 有 equity_stock：
+       * raw 中显式 ticker 且后缀属合法列表(.T/.TW/.HK/.SS/.SZ/.KS/.KQ/.AS/.L/.PA/.DE/.SW/.TO) → 直接复制。
+       * 若 raw 或 aliases 出现上海股票后缀 ".SH"，应规范修正为 ".SS"；深圳维持 ".SZ"。
+       * 若 norm 中显式包含无后缀股票代码，且该代码是清晰可识别的美国上市股票/ADR 代码，可直接保留该 ticker；若是美国本土股票则 country="USA"，若是 ADR / DR 则 country 仍填发行主体原属国家；不要求强行补后缀。
+       * 后缀非法（如 ".JP"）但 aliases / 金融常识足以强烈指明市场 → 修正为标准后缀（如 "8301.JP" + 日本银行 → "8301.T", country="JPN"；加拿大主板股票可修正为 .TO）。
+       * 若后缀不在已知列表但仍可从 aliases / 公司身份 / 上市地常识明确推断主要市场，则允许直接规范成你体系中的标准本地后缀；不要机械保留错误后缀。
+       * 若后缀不在已知列表且无法从别名/上下文明确推断 → 保留原始字符串，country="GLOBAL"。
+       * 无显式 ticker → 推断最主流本地上市代码（见下文 ticker 推断优先规则）；推断不出则 ""。
 
-IMPORTANT PRIORITY RULES:
-- `instrument_normalized` is the main thing being classified.
-- `aliases` are context for validation and disambiguation.
-- If a weak alias is ambiguous by itself (for example “10年”, “原油”, “半导体”, “A股”), do NOT classify from that alias alone; rely on the normalized instrument plus the overall alias set.
-- If the aliases strongly contradict the normalized instrument, classify the most reasonable exposure implied by the combined evidence, but still keep `raw` equal to the input `instrument_normalized`.
-- The goal is stable tagging for my normalized buckets, not transcript re-extraction.
+=== 核心信任层级 ===
+1. instrument_normalized 优先信任。
+2. aliases 用于辅助。推翻 norm 需满足：aliases 极高置信、一致、无歧义，且 norm 明显不合理。
+3. MSCI 代理还原：若 norm 含 "Index" 而 aliases 全部是非指数词汇（板块/行业/因子/区域/具体公司名），则可忽略 Index 外壳，按 aliases 实质类型分类；但该规则主要用于在 benchmark / sector / factor / cap 之间调整，不应轻易把指数 norm 降格为单一股票。若 aliases 本身含指数含义则保留 benchmark。
+   示例：
+   - norm="MSCI China Consumer Staples Index", aliases=["白酒","白酒消费类股"] → 行业 → equity_sector25FoodBeverageTobacco, country="CHN"
+   - norm="MSCI China Value Index", aliases=["价值因子","价值股"] → 因子 → equity_factorValue, country="CHN"
+   - norm="MSCI AC Asia Pacific Index", aliases=["亚洲股市","亚太股市"] → 区域基准 → equity_benchmark, country="ASIAPAC"
+   - norm="MSCI China Consumer Staples Index", aliases=["贵州茅台","五粮液"] → 仍优先视为中国消费必需品相关的板块/基准敞口，不应仅凭成分股别名直接改判为 equity_stock
+   - norm="BSE 50 Index", aliases=["北创50"] → BSE=Beijing Stock Exchange，norm 自身即指数，aliases 为 ASR 偏差 → equity_benchmark, country="CHN"
+4. 泛行业词默认中性：对于“电力、银行、地产、半导体、消费、科技、能源”等泛行业/板块词，若 norm 与 aliases 都不含明确国家或区域限定词，不得仅因语言是中文而输出 CHN，默认 country="GLOBAL"。
+   示例：
+   - norm="电力", aliases=["电力"] → equity_sector11Utilities, country="GLOBAL"
+   - norm="银行", aliases=["银行"] → equity_sector25Banks, country="GLOBAL"
+   - norm="半导体", aliases=["半导体"] → 若仅能确定为行业词，则优先行业标签，country="GLOBAL"
 
-CLASSIFICATION RULES (DECISION TREE):
-- EQUITY TICKER SUFFIX -> COUNTRY (HARD RULES):
-  - If raw ends with ".T" => country="JPN" (Tokyo Stock Exchange). NOT Taiwan.
-  - If raw ends with ".TW" => country="TWN".
-  - If raw ends with ".HK" => country="HKG".
-  - If raw ends with ".SS" or ".SH" or ".SZ" => country="CHN".
-  - If raw ends with ".KS" or ".KQ" => country="KOR".
-  - If raw ends with ".AS" => country="NLD".
-  - If raw ends with ".L" => country="GBR".
-  - If raw ends with ".PA" => country="FRA".
-  - If raw ends with ".DE" => country="DEU".
-  - If raw ends with ".SW" => country="CHE".
+=== 区域代码表及映射提示 ===
+单一国家：使用 ISO 3166-1 alpha-3（如 USA, CHN, JPN, GBR 等）。
+区域代码及对应的常见中文/英文关键词：
+  GLOBAL      全球/全世界/全球市场/多区域/all-country
+  DEVELOPED   发达市场/已发展市场
+  EMERGING    新兴市场
+  FRONTIER    前沿市场
+  AMERICAS    美洲
+  NORTHAM     北美
+  LATAM       拉丁美洲/拉美/南美
+  EUROPE      欧洲/欧股/泛欧
+  MENA        中东与北非/中东
+  AFRICA      非洲
+  ASIAPAC     亚太/亚洲/亚洲市场/亚太地区/亚洲股市（默认）
+  ASIAPACEXJP 亚太（除日本）/亚洲（除日本）
+  ASIAPACDEV  亚太发达市场
+  ASIAPACEM   亚太新兴市场
+若 aliases 仅模糊提及“亚洲”或“亚太”，默认使用 ASIAPAC；明确提到“除日本”时才使用 ASIAPACEXJP；其余区域代码按需匹配。
 
-- FX:
-  - Currency names/codes/synonyms -> fx_* (e.g., "USD", "US Dollar", "US Dollar (USD)", "USD (US Dollar)" -> fx_usd).
-  - US Dollar Index / DXY -> fx_usd.
-  - Currency pair like "USD/JPY" or "USDJPY" -> include BOTH fx_usd and fx_jpy.
-  - IMPORTANT: only map to a specific fx_* tag if the currency is unambiguous (exact code like "THB" or a clear name like "Thai Baht").
-    - If the raw is a short all-caps token that is NOT a known currency code, do NOT guess; prefer equity_stock (ticker) or unclassified.
-  - Unknown / ambiguous currency -> fx_other.
-- COMMODITY:
-  - Gold/Silver/Oil/Natural gas/etc -> corresponding cmd_* tag; otherwise cmd_other.
-  - Ignore spot/future/expiry wrappers.
-- GOV / RATES:
-  - If tenor is mentioned, map to gov_1M/3M/6M/1Y/2Y/3Y/5Y/7Y/10Y/20Y/30Y.
-  - If it is gov/rates but tenor is unclear -> gov_other.
-  - TIPS / inflation-protected Treasuries:
-    - If tenor is mentioned, map to gov_tips5Y/10Y/30Y.
-    - If TIPS is mentioned but tenor is unclear -> gov_tipsother.
-- RATES (non-government):
-  - Inflation swap / breakeven style strings (e.g., "USD 5Y5Y Inflation Swap", "EUR 5Y5Y Inflation Swap") -> rates_inflation_swap.
-  - Other rate derivatives/benchmarks (if clearly tradable but not a sovereign bond) -> rates_other.
-- CREDIT / SPREAD:
-  - "Investment grade" / "IG" -> credit_ig.
-  - "High yield" / "HY" -> credit_hy.
-  - "Emerging markets" / "EM" credit -> credit_em.
-  - CDS indices like "CDX" / "iTraxx" -> credit_cds.
-  - MBS / CMBS -> credit_mbs.
-  - ABS -> credit_abs.
-  - Commercial paper -> credit_cp.
-  - Otherwise any corporate bond / bond basket / bond index that is NOT clearly sovereign -> credit_other.
-- EQUITY:
-  - Broad equity market / index beta exposure -> equity_benchmark.
-  - VIX / volatility index exposure (e.g., "VIX", "CBOE VIX") -> equity_vix.
-  - Factor/style keywords -> equity_factorValue/Momentum/Quality/LowVolatility/Dividend/Size/Growth.
-  - Cap bucket keywords -> equity_caplarge/mid/small.
-  - Clear GICS 11 sector -> corresponding equity_sector*.
-  - Single company name or explicit ticker -> equity_stock.
-- CRYPTO:
-  - "Bitcoin" / "BTC" -> crypto_btc.
-  - "Ethereum" / "ETH" -> crypto_eth.
-  - "USDT" / "Tether" -> crypto_usdt.
-  - Generic "cryptocurrency/crypto" or other coins -> crypto_other.
+=== 分类决策树 ===
 
+【EQUITY TICKER SUFFIX → COUNTRY 硬规则】
+.T→JPN  .TW→TWN  .HK→HKG  .SS/.SZ→CHN  .KS/.KQ→KOR
+.AS→NLD  .L→GBR  .PA→FRA  .DE→DEU  .SW→CHE  .TO→CAN
+
+【TICKER 推断优先规则】
+- 下列 ticker 后缀、交易所示例与股票样例仅用于说明规范化方式，不构成穷举列表。
+- 不得因为某个国家、交易所或后缀没有在示例中出现，就机械地认为该市场“不支持”或一律输出空 ticker。
+- 只要能够基于 instrument_normalized、aliases 与金融常识，高置信识别公司身份及其主要本地上市地，就应主动输出其最常用、最标准的本地上市代码格式。
+- 对于明显错误、缺失或非标准的 ticker 后缀，应根据主要上市市场主动修正为标准格式，而不是机械保留原样。
+- 只有在公司身份、主要上市地或标准 ticker 格式无法高置信判断时，才输出 ticker=""。
+- 优先选择主要本地上市代码（非 ADR），除非 norm 或 aliases 明确提到“ADR”“美股”“纳斯达克”“纽交所上市”等。
+- 若同一公司同时存在 ADR / 美股代码与本地主要上市代码，默认优先选择本地主要上市代码（非 ADR）；若 aliases 明确提到“港股”则选 .HK，若明确提到“美股”或 “ADR” 才选对应美国代码。
+- 若最终选择的是 ADR / DR 代码，ticker 可保留该美国存托凭证代码，但 country 仍填写发行主体原属国家/主要业务归属，不填 USA。
+- 若公司为跨国企业，选择其注册地或总部所在地的主要交易所。
+- 若有多个本地上市地，选择日均交易量最大的代码。
+- 若 aliases / 金融常识已足以明确主要上市地，但给定 ticker 缺少标准后缀、后缀属于错误市场、或只给了本地 share class 形式，允许你主动补齐并修正为本体系标准 ticker。
+- 若 norm 已显式给出无后缀美国 ticker，且公司身份清晰，可直接保留该美国代码；美国本土股票填 country="USA"，美国上市 ADR / DR 则按发行主体原属国家填写 country；例如 China Mobile (CHL) → ticker="CHL", country="CHN"。
+- 中国 A 股规范：上海证券交易所统一输出 .SS，深圳证券交易所统一输出 .SZ；即使输入出现 .SH，也应修正为 .SS。
+- 加拿大股票若能明确为多伦多证券交易所主上市地，优先使用 .TO 作为标准后缀；例如 Bombardier 应优先规范为相应 TSX 代码并赋 country="CAN"。
+
+【FX 外汇】
+- 货币名称/代码/同义词 → fx_*（如 USD / US Dollar / DXY → fx_usd）。
+- 货币对如 USD/JPY → 同时包含 fx_usd 和 fx_jpy。
+- 多货币篮子 / 货币指数 / 区域货币组合（如 Asia Dollar Index / 亚元指数 / EM FX basket）→ fx_basket，country 填其对应区域；例如 Asia Dollar Index → fx_basket, country="ASIAPAC"。
+- **CNY/CNH 一体规则**：无论代码是 CNY 还是 CNH，无论 aliases 提到“在岸”“离岸”“人民币”等任何形式，统一映射为 fx_cny。
+- 仅无歧义时映射具体标签；全大写短字符（≤5 个字母）非已知货币代码时，不得默认视为 equity_stock。必须先结合 norm 与 aliases 判断它是否更像商品代码、指数简称、利率/债券符号或股票 ticker；只有在存在明确公司/ticker 证据时才判为 equity_stock，否则输出更合适的资产类别，仍无法判断则 unclassified。
+- 模糊货币 → fx_other。
+
+【COMMODITY 大宗商品】
+- 黄金/白银/原油/天然气等 → 对应 cmd_*；否则 cmd_other。
+- 忽略现货/期货/到期日包裹层。
+
+【GOV / RATES 政府债与利率】
+- 提及期限 → gov_1M/3M/6M/1Y/2Y/3Y/5Y/7Y/10Y/20Y/30Y。
+- 政府/利率但期限不清晰 → gov_other。
+- TIPS + 期限 → gov_tips5Y/10Y/30Y；TIPS 期限不清晰 → gov_tipsother。
+
+【RATES 非政府利率】
+- 通胀互换/盈亏平衡风格 → rates_inflationswap。
+- 其他非主权利率衍生品/基准 → rates_other。
+
+【CREDIT & SPREAD 信用与利差】
+- IG → credit_ig  /  HY → credit_hy  /  EM credit → credit_em
+- CDS 指数(CDX/iTraxx) → credit_cds
+- MBS/CMBS → credit_mbs  /  ABS → credit_abs
+- 商业票据 → credit_cp
+- 其余公司债/债券篮/债券指数 → credit_other
+- country 同样适用区域代码表：如“欧洲高收益债”→ credit_hy, EUROPE；“亚洲投资级债”→ credit_ig, ASIAPAC；不明确则 GLOBAL。
+
+【EQUITY 权益类】
+- 多标签优先级：当 aliases 同时包含市值/因子词和行业词时，优先输出行业标签；仅在完全没有行业词时使用市值分档或因子标签。
+1) equity_benchmark 的定义：
+   - 仅用于国家、地区或广义市场整体表现的代表性股票基准。
+   - 它应当是该国家/地区“整体股市”或“主要市场 beta”的代理。
+   - 不要把主题指数、行业指数、因子指数、概念篮子、龙头股组合误判为 equity_benchmark。
+   - 若对象主要表达的是行业、风格、市值层级或主题篮子，应改用 equity_sector11* / equity_sector25* / equity_factor* / equity_cap*。
+   - 符合以上定义的宽基/主流市场指数 → equity_benchmark（如 S&P 500、NASDAQ 100、Dow Jones、沪深300、MSCI China Index 等）。
+2) VIX 等波动率指数 / 股票波动率指数 → equity_volatility。
+3) 因子/风格（先执行 MSCI 代理还原）：
+   - 价值/动量/质量/低波/红利/成长 → 对应 equity_factor*
+   - 高β / 低β / beta / beta trade → equity_factorBeta
+   - 周期因子 / 顺周期 / 周期风格 / 景气循环因子 → equity_factorCyclical
+   - 但若 norm 或 aliases 已明确指向具体行业（如钢铁、煤炭、有色、航运、化工等），优先使用对应行业标签，不要强行归为 equity_factorCyclical
+   - 流动性因子 / liquidity factor / 高流动性股票 / 低流动性溢价 → equity_factorLiquidity
+   - 但若“流动性”仅指宏观流动性、货币条件、市场资金面、央行投放等，不要映射为 equity_factorLiquidity
+   - 防御型/防守型 → equity_factorDefensive
+   - 其他明确因子 → equity_factorUndefined
+   - 规模/大小盘风格 → 优先 equity_cap*；若明确为因子而非市值分段可用 equity_factorSize
+4) 市值分档 → equity_capmega / large / mid / small。
+   - “mega cap / 超大市值 / 巨头 / 七巨头 / Magnificent 7 / FAANG / Big Tech leaders” 这类以超大市值龙头股票集合为核心语义的命名篮子，优先映射为 equity_capmega。
+   - 若该巨头篮子在金融常识上明显对应单一国家市场（如 Magnificent 7 / FAANG 通常对应 USA），即使 norm 未显式写出国家，也可推断对应 country。
+   - 若名称明确是宽基主流市场基准（如 S&P 500、沪深300、MSCI China Index），仍使用 equity_benchmark，不要改为 equity_capmega。
+5) 行业/概念板块（优先 GICS 25，其次 GICS 11）：
+    - 规则：若 norm 或 aliases 能明确落到某个 GICS 二级行业组，则优先使用对应的 `equity_sector25*` 标签；若只能明确到一级行业，则使用对应的 `equity_sector11*` 标签；只有连一级行业都无法自信判断时，才用 equity_sectorUndefined。
+    - Energy / Materials / Utilities：当前仅保留一级标签，直接使用 equity_sector11Energy / equity_sector11Materials / equity_sector11Utilities。
+    - 工业一级：equity_sector11Industrials
+      · 二级：equity_sector25CapitalGoods / equity_sector25CommercialProfessionalServices / equity_sector25Transportation
+    - 非必需消费一级：equity_sector11ConsumerDiscretionary
+      · 二级：equity_sector25AutomobilesComponents / equity_sector25ConsumerDurablesApparel / equity_sector25ConsumerServices / equity_sector25ConsumerDiscretionaryDistributionRetail
+    - 必需消费一级：equity_sector11ConsumerStaples
+      · 二级：equity_sector25ConsumerStaplesDistributionRetail / equity_sector25FoodBeverageTobacco / equity_sector25HouseholdPersonalProducts
+    - 医疗一级：equity_sector11HealthCare
+      · 二级：equity_sector25HealthCareEquipmentServices / equity_sector25PharmaceuticalsBiotechnologyLifeSciences
+    - 金融一级：equity_sector11Financials
+      · 二级：equity_sector25Banks / equity_sector25FinancialServices / equity_sector25Insurance
+      · 中文语境下："金融" / "金融股" / "金融板块" → equity_sector11Financials
+      · "银行" / "银行股" / "银行板块" → equity_sector25Banks
+      · "保险" / "保险股" / "保险板块" → equity_sector25Insurance
+      · "券商" / "券商股" / "证券" / "证券股" / "大金融" → equity_sector25FinancialServices
+    - 信息技术一级：equity_sector11InformationTechnology
+      · 二级：equity_sector25SoftwareServices / equity_sector25TechnologyHardwareEquipment / equity_sector25SemiconductorsSemiconductorEquipment
+      · 中文语境下："科技" / "高科技" / "高新板块" / "高效能运算" 若不足以细化到二级，则使用 equity_sector11InformationTechnology
+    - 通信服务一级：equity_sector11CommunicationServices
+      · 二级：equity_sector25TelecommunicationServices / equity_sector25MediaEntertainment
+    - 房地产一级：equity_sector11RealEstate
+      · 二级：equity_sector25EquityREITs / equity_sector25RealEstateManagementDevelopment
+    - 无法自信映射→ equity_sectorUndefined。
+6) 单一公司名或 ticker → equity_stock。
+
+【特殊标的的豁免与直接分类】
+- 衍生品（期货/期权/互换/远期）：若 norm 或 aliases 明确指代衍生品合约本身，且底层资产明确，直接映射底层资产标签；不额外创建衍生品标签。
+- 波动率指数 / VIX 相关产品（如 VIX 期货、VXX ETN）：映射为 equity_volatility；country 按其所对应股票市场的暴露地域填写，而非产品上市地；例如 VIX / VXX / UVXY → country="USA"，VHSI / VHSCEI → country="HKG"；ticker=""。
+- 基金 / ETF / ETN（若上游未过滤）：优先按其所追踪的底层敞口分类，而不是一律视为 equity_stock。
+  - 例如：SPY / IVV / VOO → equity_benchmark, country="USA"
+  - 例如：QQQ → equity_benchmark, country="USA"
+  - 行业 ETF → 对应 equity_sector11* 或 equity_sector25*
+  - 因子 ETF → 对应 equity_factor*
+  - 市值风格 ETF / 巨头篮子 ETF → 对应 equity_cap*
+  - 只有在无法可靠判断其底层敞口时，才退回为 equity_stock + 对应 ticker + 上市地 country。
+
+=== 标签输出严格约束 ===
+- 所有标签必须从 UnderlyingAsset 列表中逐字复制，严禁修改、缩短、拼写错误或自创标签。
+- 除货币对等少数强制多标签场景外，优先输出单一最精确标签。
+
+【CRYPTO 加密资产】
+- Bitcoin/BTC → crypto_btc  /  Ethereum/ETH → crypto_eth
+- USDT/Tether → crypto_usdt
+- 泛称或其他币种 → crypto_other
+
+=== 兜底 ===
+无法自信映射 → ["unclassified"]
 """

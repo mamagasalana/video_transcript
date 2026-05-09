@@ -14,7 +14,8 @@ from template.template_20260424_2026 import (
 load_dotenv()
 
 
-MODEL = 'deepseek-v4-flash'
+MODEL = 'deepseek-v4-flash' # model from instrument extraction
+MODEL_CLASS = 'deepseek-v4-pro' # model for tag summary
 INSTRUMENT_OUTPUT_PREFIX = '2026_04_24_t0'
 CLASSIFICATION_OUTPUT_PREFIX = 'class4'
 CHUNK_SIZE = 20
@@ -24,6 +25,7 @@ def pending_classification_inputs():
     ret = get_tag_summary(
         prefix=INSTRUMENT_OUTPUT_PREFIX,
         model=MODEL,
+        model_class=MODEL_CLASS,
         classification_prefix=CLASSIFICATION_OUTPUT_PREFIX,
     )
 
@@ -37,7 +39,7 @@ def pending_classification_inputs():
     ]
 
 
-def chunk_inputs(rows, chunk_size=20):
+def chunk_inputs(rows, chunk_size=30):
     return [rows[i:i + chunk_size] for i in range(0, len(rows), chunk_size)]
 
 
@@ -51,7 +53,7 @@ def run():
         output_folder=CLASSIFICATION_OUTPUT_PREFIX,
         schema=schema,
         default_block_label='Input',
-        model=MODEL,
+        model=MODEL_CLASS,
         temperature=0,
     )
     return app.run_batch_multiprocess(texts_to_items(texts))
