@@ -39,7 +39,7 @@ def get_tag_summary(
             norm_inst = to_simplified.convert(x['raw'])
             tmp = []
             country = '_%s' % x['country']
-            if country == '_GLOBAL':
+            if country in ['_GLOBAL', '_']:
                 country = ''
             ticker = x['ticker']
             if ticker:
@@ -48,6 +48,8 @@ def get_tag_summary(
             for ua in x['underlying_assets']:
                 if len(x['underlying_assets']) == 2 and ua == 'fx_usd':
                     continue
+                if 'equity_factor' in  ua:
+                    country = ''
                 tmp.append('%s%s%s' % (ua, country, ticker))
             classification_map[norm_inst] = tmp.copy()
             classification_source[norm_inst] = os.path.basename(f).split('.')[0]
@@ -81,8 +83,8 @@ def get_tag_summary(
 if __name__ == '__main__':
     import pandas as pd
 
-    ret = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-flash')
-    ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class7')
+    ret = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-flash', classification_prefix='class8')
+    ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class8')
 
 
     df = pd.DataFrame.from_dict(ret['classification_map'], orient='index')
