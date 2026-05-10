@@ -11,26 +11,31 @@ from typing import Dict, List, Optional, Literal, Annotated
 """
 field_id_deepseek = Field(..., ge=1, description="从1开始递增的分段编号")
 
-Intent = Literal["open_buy", "open_sell", "close_buy", "close_sell", "unclear", "invalid"]
+Intent = Literal["open_buy", "open_sell", "close_buy", "close_sell", "unclear", "invalid", "duplicate"]
 
 class TradingSignalBase(BaseModel):
     instrument: List[str] = Field(..., min_length=1,
         description=(
             "必须精确复制 Helper 中对应项的 instrument 列表，用于和 helper 建立一一对应关系。"
-            "列表中的每一项都是同一标的在 Transcript 中可能出现的别名或写法。"
+            "列表中的每一项可以是该 helper item 在 Transcript 中可能出现的别名、写法、相关提法，"
+            "或同一聚合观察对象下的代表性说法。"
+            "该字段的作用是帮助模型在 Transcript 中定位当前 instrument_normalized，"
+            "而不是要求模型对列表中的每个元素分别单独输出 signal。"
             "不得新增、删减、改写、翻译或重新排序；输出时应直接沿用 Helper 原始列表。"
         ),
     )
     instrument_normalized: str = Field(..., min_length=1,
         description=(
             "必须精确复制 Helper 中对应项的 instrument_normalized 字段；"
-            "该字段是该标的的唯一标准化标识，例如 cmd_gold / fx_usd。"
-            "若 Helper 提供的是标准化名称，则直接沿用，不得自行重写。"
+            "该字段是当前 helper item 的目标标识：既可以是单一标的的标准化名称，也可以是聚合后的分类目标/观察目标，"
+            "例如 cmd_gold / fx_usd / equity_benchmark_CHN。"
+            "第三步的核心判断对象是 instrument_normalized；instrument 列表只是帮助在 Transcript 中定位该目标。"
+            "若 Helper 提供了该目标标识，则直接沿用，不得自行重写。"
         ),
     )
     intent: Intent = Field(...,
         description=(
-            "交易意图枚举，仅可填写：open_buy / open_sell / close_buy / close_sell / unclear / invalid。\n\n"
+            "交易意图枚举，仅可填写：open_buy / open_sell / close_buy / close_sell / unclear / invalid / duplicate。\n\n"
             "**open_buy**：主持人对该标的给出偏多、偏买入、偏布局的建议，或给出能支撑做多的理由与判断。\n"
             "  常见偏多证据包括：价格被低估、基本面改善、技术面买入信号、资金流入、政策支持等，并暗示或建议买入/布局。\n\n"
             "**open_sell**：与 open_buy 相反；主持人对该标的给出偏空、偏卖出、偏做空的建议，或给出能支撑做空的理由与判断。\n"
@@ -43,7 +48,12 @@ class TradingSignalBase(BaseModel):
             "  示例：“虽然趋势向下，但短期反弹可能强劲，空单应回补”、“下跌空间有限，不宜继续做空”。\n\n"
             "**unclear**：主持人只是提到该标的、解释背景、陈述价格变化、做类比、做举例，或证据不足以形成可执行建议。\n"
             "  常见误判：单纯说“今天油价大跌”而没有给出看空理由，应判为 unclear；若接着说“因为库存增加、需求疲软，后市仍看跌”，则应判为 open_sell。\n\n"
-            "**invalid**：Helper 给出的对象并非可交易标的，或在当前语境下属于错误/无效标的，例如 CPI、GDP、经济数据等。\n\n"
+            "**invalid**：Helper 给出的对象并非可交易标的，或在当前语境下属于错误/无效标的，例如 CPI、GDP、经济数据等。"
+            "另外，若某个 helper item 虽然本身可交易，但其 instrument_normalized 与当前 Transcript 语境明显不匹配，"
+            "且又不存在另一条更合适、可与之形成 duplicate 关系的 helper item，则也可判为 invalid。\n\n"
+            "**duplicate**：当前 helper item 的 instrument 与另一个 helper item 的 instrument 在本段 Transcript 中明显重叠，"
+            "或显然是在指向同一讨论目标；而当前 item 只是重复、较弱、较不贴切或较次要的解释路径。"
+            "此时应保留更贴切的那一项给出真实交易信号，当前 item 标为 duplicate，而不是勉强给 open/close/unclear。\n\n"
             "**重要区分**：\n"
             "- 陈述事实 vs 交易建议：如果主持人只是描述价格涨跌、列举数据，但没有对这些数据赋予方向性判断或操作导向，则判为 unclear。\n"
             "- 证据的强度：单一但明确的偏空/偏多理由即可支撑 open_sell 或 open_buy，无需多个理由。\n"
@@ -76,16 +86,46 @@ class TradingSignal(BaseModel):
 
 
 SCHEMA_SIGNAL_EXTRACT = r"""
-SCHEMA_VERSION=2026-04-24T00:00:00
+SCHEMA_VERSION=2026-05-10T00:00:00
 你是一个中文(普通话)经验丰富的财经分析师，专门分析《金钱报》主持人(杨世光) 的交易信号。
+
+背景：
+上游系统在第三步之前，已经先完成前两步处理：
+- 第一步：从完整 Transcript 中抽取原始标的提法，并得到原始的 instrument / instrument_normalized
+- 第二步：基于第一步结果做分类，把原始提法进一步归并到最终的分类目标
+
+因此，第三步收到的 Helper 并不是“第一步原样输出”，而是前两步处理后的 helper item。每个 helper item 提供：
+- instrument：来自 Transcript 的原始提法、别名、写法或相关触发词；这些词是为了帮助你回到原文定位讨论对象
+- instrument_normalized：经过前两步处理后，最终归并出来的目标标识；它代表第三步真正要判断交易信号的目标
+
+换句话说：
+- instrument 更接近“原文里怎么说”
+- instrument_normalized 更接近“前两步最后认为它应归到哪个目标”
+
+因此，在第三步里：
+- instrument_normalized 是当前交易信号判断的核心目标，具有最高信任度
+- instrument 列表只是帮助你回到 Transcript 中定位这个 instrument_normalized 在原文里的对应说法
+- instrument 列表可能包含 ASR 瑕疵、相关提法、或同一聚合观察对象下的代表性触发词
+
+你的任务不是重新抽取 instrument，也不是重写 helper，而是基于 Transcript 判断：
+- 这个 helper item 对应的 instrument_normalized 在当前语境下是否有交易信号
+- 若对同一个 helper item 的同一个 instrument_normalized 出现多个彼此不同的 intent，允许输出多条 signal
+- 若不同 helper item 的 instrument 实际上在说同一件事，则可把较弱者判为 duplicate
 
 输入:
 - Transcript：完整逐字稿
 - Helper：instruments JSON（已抽取好的 instrument 列表，至少包含 instrument / instrument_normalized）
 
 目标:
-基于 Transcript，对 Helper 中列出的每一个 instrument 逐一判断其交易意图（intent）并输出交易信号。
-必须覆盖 Helper 的所有 instrument：每个 helper item 都要输出且只输出一条 signal。
+基于 Transcript，对 Helper 中列出的每一个 helper item 所对应的 instrument_normalized 逐一判断其交易意图（intent）并输出交易信号。
+必须覆盖 Helper 的所有 instrument：每个 helper item 至少要输出一条 signal。
+第三步的核心对象是 Helper.item.instrument_normalized；Helper.instrument 列表只是帮助你在 Transcript 中定位这个目标。
+允许同一个 helper item 输出多条 signal，但仅限于 Transcript 对同一个 instrument_normalized 给出了彼此不同的 intent（例如一条 open_buy，另一条 open_sell）。
+  - 示例：若 helper item 为 `{'instrument': ['美国股市', '标普500', '道琼指数'], 'instrument_normalized': 'equity_benchmark_USA'}`，
+    Transcript 同时表达“标普500要小心/可考虑卖出”以及“道琼指数相对抗跌/可留意布局”，
+    则允许对同一个 helper item 输出两条 signal；两条 signal 的 instrument 与 instrument_normalized 完全相同，
+    但 intent / evidence / summary 不同。
+  - 若只是同一 helper item 在 Transcript 多处重复支持同一个 intent（例如都是 open_buy），则应合并为一条 signal，而不是重复输出多条同方向 signal。
 
 **关键提示（必须遵守）：**
 1. **主持人风格**：杨世光主持人偏向“布局型”、“买低卖高”、“不要追价”的风格。他常通过宏观数据、估值、资金流向、技术形态等分析来暗示方向，而不是直接喊单。因此，即使没有明确说“买入”或“卖出”，只要给出支撑做多/做空的理由，也应判为 open_buy/open_sell。
@@ -101,17 +141,32 @@ SCHEMA_VERSION=2026-04-24T00:00:00
    - **对当前操作的明确否定**：若主持人明确表达“不要追”、“现在不适合”、“建议观望”、“等拉回再买”、“应维持高现金水位”、“寻找放空机会”等，这是对**当前介入动作**的直接叫停。此时应判为 close_buy（否定当前做多）或 close_sell（否定当前做空），即使主持人同时声称“长期看好”。
      - *示例*：“我们对陆股仍然是长期看好，但尽量要保持高现金水位，寻找一些放空的机会跟标的” → **close_buy**（长期看好但被当前防御/做空部署覆盖，明确否定当下做多）。
 6. **含蓄表达**：当主持人反复强调风险、泡沫、大户离场、估值过高，且没有给出相反的方向性理由时，即使没有直接说“卖出”，也往往意味着看空（open_sell），因为他认为当前不适合持有或应该做空。反之亦然。但要结合第5条区分是“否定当前操作”还是“仅作提醒”。
+7. **重复 Helper 处理**：duplicate 只用于不同 helper item 之间。若多个 helper item 在当前 Transcript 中明显对应同一讨论目标，而其中某一项只是重复、较弱、较不贴切、过度细化、或只是另一项的替代解释路径，则应把较次要者判为 duplicate。不要为了“每个 helper 都要有结果”而给重复项硬判 open/close/unclear。判为 duplicate 时，仍应尽量提供最少量但足够的 evidence，并在 summary 中简要说明为什么另一条 helper item 更贴切。
+8. **ADR / 本地股票重复优先规则**：若同一公司同时出现本地上市版本与 ADR / 美股版本的 helper item，duplicate 默认优先保留本地上市/原属市场项，ADR / 美股项判 duplicate。若 Transcript 又明确指向某个更具体的 ADR / 美股版本，则可反转该默认优先级。
+9. **同一 Helper 多信号规则**：若同一个 helper item 在 Transcript 中被赋予多个彼此不同的 intent，则允许为同一个 helper item 输出多条 signal。此时多条 signal 的 instrument 与 instrument_normalized 都保持完全相同，差异只体现在 intent、evidence、summary 上；不要为了区分不同证据来源而改写 instrument 或拆分出新的 instrument。若只是同一 intent 被多处重复支持，则应合并为一条 signal。
+10. **unclear / invalid 互斥规则**：对同一个 helper item 而言：
+   - 若已经形成任何更明确的判断（open_buy / open_sell / close_buy / close_sell / duplicate / invalid），则不应再额外输出 unclear。
+   - 若已经判为 invalid，则不应再同时输出 open_buy / open_sell / close_buy / close_sell / unclear；invalid 只能作为该 helper item 的错误/失效兜底结果。
+   - unclear 只用于“没有形成任何更明确判断”的兜底场景。
 
 核心约束（必须遵守）：
-1) 覆盖性：signals 中必须覆盖 Helper 的全部 helper item；每个 helper item 必须且只能对应一条 signal。
+1) 覆盖性：signals 中必须覆盖 Helper 的全部 helper item；每个 helper item 至少对应一条 signal。
 2) 不新增标的：不得在 signals 中输出 Helper 之外的任何 instrument；不得自行补充未出现于 Helper 的标的。
 3) Helper 优先：signal 中的 instrument / instrument_normalized 必须直接沿用 Helper 对应字段，不得改写。
-4) 别名匹配：Helper.instrument 是同一标的的别名列表；只要 Transcript 明确提到其中任一别名，都视为命中该 helper item。
+4) 定位规则：Helper.instrument 是该 helper item 的触发词列表；可以是别名、写法、相关提法或同一聚合观察对象下的代表性说法。它的作用是帮助你在 Transcript 中定位该 instrument_normalized；只要 Transcript 明确提到其中任一项，都可视为命中该 helper item。
 5) 以 Transcript 为准：所有 intent、evidence、summary 判断只能来自 Transcript 明确表达的内容；不得引入 Transcript 之外的新信息。
 6) 证据原文：evidence 的每一项都必须是 Transcript 中真实存在的连续原文子串，必须逐字复制，不得改写、拼接或凭空生成。
 7) 解释约束：summary 的每一项都要解释对应 evidence 为什么支持 intent；summary 可以概括，但不得引入 Transcript 之外的事实。
 8) 配对关系：summary 与 evidence 一一对应；若有 2 条 evidence，则必须有 2 条 summary。若 evidence 为空，则 summary 也应为空。
-9) 合并原则：同一个 helper item 只输出一条 signal；如果 Transcript 多处提及该 item 的多个别名，把相关证据合并到同一条 signal 中。
+9) 单条 signal 的聚焦原则：每一条 signal 必须只表达一个清晰的交易意图；如果同一个 helper item 对同一个 instrument_normalized 出现不同 intent，则应拆成多条 signal，而不是混在同一条里。
+10) 合并原则：若同一个 helper item 在 Transcript 多处重复支持同一方向，可把相关证据合并到同一条 signal 中。
+11) duplicate 判定重心：当多个 helper item 的 instrument 列表有重叠、近似或明显指向同一讨论对象时，首先应判断这些 instrument 是否在说同一件事；若是，再比较哪个 instrument_normalized 更贴切当前 Transcript 语境。较弱、较泛、较偏、或较不贴切的 item 判为 duplicate。也就是说，duplicate 先看 instrument 是否重叠，再看 instrument_normalized 哪个更贴切。
+   - 示例：若同时存在 `{'instrument': ['电力股', '特高压'], 'instrument_normalized': 'equity_sector11Utilities'}`
+     与 `{'instrument': ['电力股'], 'instrument_normalized': 'equity_sector11Utilities_CHN'}`，
+     两条 helper item 的 instrument 明显重叠，因为都命中“电力股”。
+     此时先判断它们是不是在说同一件事；若 Transcript 语境明显是在讲大陆/A股/中国市场中的电力股，
+     则 `equity_sector11Utilities_CHN` 更贴切，应保留该项给出真实 signal，
+     而较泛的 `equity_sector11Utilities` 判为 duplicate。
 
 **intent 判定规则（详细版）：**
 - **open_buy**：主持人对该标的给出偏多、偏买入、偏布局的建议，或给出能支撑做多的理由与判断。
@@ -143,11 +198,25 @@ SCHEMA_VERSION=2026-04-24T00:00:00
   - 注意：如果主持人给出了方向性倾向（如“有机会”），即使加了“要观察”，但只要没有明确否定当前操作，就不应归为 unclear，而应按其倾向判为 open_buy/open_sell。
 
 - **invalid**：Helper 给出的对象并非可交易标的，或在当前语境下属于错误/无效标的，例如 CPI、GDP、经济数据、宏观指标等。
+  - 也可用于：该 helper item 一般而言可交易，但它在当前 Transcript 中明显是错误映射/错误目标，且又不存在另一条更合适的 helper item 可供它判为 duplicate。
+  - invalid 是兜底结果：同一个 helper item 一旦判为 invalid，就不应再同时输出 open_buy / open_sell / close_buy / close_sell / unclear。
+
+- **duplicate**：只用于不同 helper item 之间。当前 helper item 的 instrument 与别的 helper item 的 instrument 在本段 Transcript 中明显重叠、近似，或显然是在说同一件事、同一家公司、同一聚合市场观点，而当前 item 只是重复、较弱、较不贴切、或较次要版本。
+  - 常见情况：
+    - 同一公司同时出现本地上市版本与 ADR / 美股版本，默认优先保留本地上市/原属市场版本；
+    - 同一主题同时出现泛化标签与更贴切的国家/市场定向标签；
+    - 同一讨论目标被上游重复抽成两条 helper，而其中一条只是较弱解释。
+  - duplicate 的判断顺序是：先看 instrument 是否明显重叠或在说同一件事，再看哪个 instrument_normalized 明显更贴切当前语境；若属于同公司的 ADR / 本地股票重复，默认优先保留本地上市/原属市场版本，把 ADR / 美股版本判为 duplicate；较弱者判 duplicate。
+  - duplicate 最好仍保留最少量但足够的 evidence，以显示它为什么与另一条 helper item 重叠，以及为什么它是较弱解释。
+  - duplicate 不是 invalid：它不表示该 helper 天然不可交易，而是表示在当前 Transcript 语境下，它应被另一条 helper 覆盖。
 
 **重要区分（补充说明）：**
 - **单一理由即可**：只要主持人给出单一但清晰、可执行、带方向的支持理由，就可以判为 open_buy 或 open_sell，不要求必须有多个理由。
 - **证据的强度**：证据不必是绝对确定，只要主持人表达出倾向性（如“可能”、“恐怕”、“要小心”），也应结合上下文判断。
 - **上下文优先**：若某段话表面中性，但结合前后文明显指向操作方向，应以整体意图为准。
+- **聚合 helper 的多信号**：若 helper.instrument 包含多个触发词，而 Transcript 对应到同一个 instrument_normalized 给出了不同 intent，则应拆成多条 signal，但每条 signal 仍沿用同一个 helper 的 instrument 与 instrument_normalized；不要因为证据来自不同触发词就改写输出结构。若最终 intent 相同，则应合并成一条 signal。
+- **unclear 的地位**：unclear 是兜底，不是并列补充项。只要同一个 helper item 已经能形成更明确的 open/close/duplicate/invalid 判断，就不应再额外输出 unclear。
+- **invalid 的地位**：invalid 也是兜底，不是并列补充项。只要同一个 helper item 已经判为 invalid，就不应再并列输出任何方向性 signal 或 unclear。
 
 注意：所有判断必须严格基于 Transcript，不得添加个人猜测。
 """
@@ -404,13 +473,29 @@ UnderlyingAsset = Literal[
   'cmd_natgas',
   'cmd_gold',
   'cmd_silver',
+  'cmd_platinum',
+  'cmd_palladium',
   'cmd_copper',
+  'cmd_lead',
+  'cmd_zinc',
+  'cmd_nickel',
   'cmd_aluminum',
   'cmd_ironore',
   'cmd_coal',
+  'cmd_carbon',
   'cmd_corn',
   'cmd_wheat',
+  'cmd_oat',
+  'cmd_rice',
   'cmd_soybean',
+  'cmd_soymeal',
+  'cmd_soyoil',
+  'cmd_cotton',
+  'cmd_sugar',
+  'cmd_coffee',
+  'cmd_cocoa',
+  'cmd_orangejuice',
+  'cmd_cattle',
   'cmd_other',
 
 
