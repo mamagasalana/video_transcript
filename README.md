@@ -78,6 +78,14 @@ Once a transcript is converted into structured outputs, we can start asking much
 
 This is the foundation for a **battle of gurus** style evaluation system.
 
+## Demo: PnL by YouTuber
+
+Below is a demo preview of the direction of the project: converting extracted signals into per-YouTuber performance tracking.
+
+<p align="center">
+  <img src="sample/youtube_pnl_demo_header.gif" alt="Demo PnL by YouTuber" width="860">
+</p>
+
 ## Example output
 
 The figure below is generated from actual processed transcript output in this repo:
