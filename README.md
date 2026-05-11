@@ -1,7 +1,7 @@
 # Who Is a Real Market Guru?
 
 <p align="center">
-  <img src="https://i.imgur.com/o7MdDZ7.png" alt="Top classification tags extracted from transcript data" width="860">
+  <img src="sample/class_top_items.png" alt="Top classification tags extracted from transcript data" width="860">
 </p>
 
 <p align="center">
@@ -83,7 +83,7 @@ This is the foundation for a **battle of gurus** style evaluation system.
 The figure below is generated from actual processed transcript output in this repo:
 
 <p align="center">
-  <img src="https://i.imgur.com/o7MdDZ7.png" alt="Classification top tags visualization" width="760">
+  <img src="sample/class_top_items.png" alt="Classification top tags visualization" width="760">
 </p>
 
 It shows the most common tagged targets found across processed dates, including:
@@ -102,13 +102,13 @@ It is a structured market-language dataset in progress.
 
 Static images are great for a quick first impression. Here are hosted snapshots of the monthly classification charts:
 
-- [2020 chart](https://i.imgur.com/11apqU5.png)
-- [2021 chart](https://i.imgur.com/F2rmTC7.png)
-- [2022 chart](https://i.imgur.com/Ar8VSfW.png)
-- [2023 chart](https://i.imgur.com/u532ISe.png)
-- [2024 chart](https://i.imgur.com/vMT3Pni.png)
-- [2025 chart](https://i.imgur.com/UcwNLJp.png)
-- [2026 chart](https://i.imgur.com/WHEo0fR.png)
+- [2020 chart](sample/class_top_5_each_month_2020.png)
+- [2021 chart](sample/class_top_5_each_month_2021.png)
+- [2022 chart](sample/class_top_5_each_month_2022.png)
+- [2023 chart](sample/class_top_5_each_month_2023.png)
+- [2024 chart](sample/class_top_5_each_month_2024.png)
+- [2025 chart](sample/class_top_5_each_month_2025.png)
+- [2026 chart](sample/class_top_5_each_month_2026.png)
 
 ## Benchmark channels
 
