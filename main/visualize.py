@@ -14,6 +14,7 @@ class Visualizer:
     def __init__( self, out_folder: str = OUT_FOLDER,):
         self.out_folder = out_folder
         os.makedirs(self.out_folder, exist_ok=True)
+        self._plotly_png_warning_shown = False
 
     def distinct_hex_colors(self, n: int):
         out = []
@@ -64,6 +65,23 @@ class Visualizer:
             return chosen
 
         return None
+
+    def _write_plotly_png(self, fig: go.Figure, path: str) -> bool:
+        """
+        Best-effort static export for Plotly charts.
+        Requires plotly image export support (typically kaleido).
+        """
+        try:
+            fig.write_image(path, width=1600, height=900, scale=2)
+            return True
+        except Exception as e:
+            if not self._plotly_png_warning_shown:
+                print(
+                    "plotly png export skipped: %s. "
+                    "Install `kaleido` to enable Plotly PNG output." % e
+                )
+                self._plotly_png_warning_shown = True
+            return False
 
     def _plot_monthly_top_each_month(
         self,
@@ -121,9 +139,11 @@ class Visualizer:
                 margin=dict(l=60, r=260, t=80, b=80),
             )
             fig.update_xaxes(tickangle=-60)
-            fig.write_html(
-                os.path.join(self.out_folder, f"class_top_{top_per_month}_each_month_{year}.html")
+            base_path = os.path.join(
+                self.out_folder, f"class_top_{top_per_month}_each_month_{year}"
             )
+            fig.write_html(base_path + ".html")
+            self._write_plotly_png(fig, base_path + ".png")
 
             if show:
                 fig.show()
