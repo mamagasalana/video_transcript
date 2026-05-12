@@ -16,3 +16,4 @@ usage.db
 outputs/viz/*.html
 outputs/viz/*.png
 ocr/debug/
+ocr/models/*.onnx

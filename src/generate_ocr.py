@@ -11,23 +11,63 @@ import subprocess
 import time
 import io
 import numpy as np
+import onnxruntime as ort
+import multiprocessing as mp
 from rapidocr_onnxruntime import RapidOCR
 from tqdm import tqdm
 
 STEP_SEC = 30
 SLIDE_DIFF_THRESHOLD = 0.10
 SAVE_DEBUG_FRAME = True
+OCR_UPSCALE = 2
+OCR_MODEL_DIR = 'ocr/models'
+OCR_DET_MODEL_PATH = f'{OCR_MODEL_DIR}/det.onnx'
+OCR_REC_MODEL_PATH = f'{OCR_MODEL_DIR}/rec.onnx'
+OCR_REC_KEYS_PATH = f'{OCR_MODEL_DIR}/dict.txt'
 WATERMARK_PATTERNS = [
     r'上帝影视',
     r'god\s*\\?$',
     r'上帝影视\s*god\s*\\?$',
 ]
+FORCE_RESET=False
+N_WORKERS = 5
+SHOW_FRAME_TQDM = False
+VERBOSE = False
+MAX_TASKS_PER_CHILD = 1
 
 os.makedirs('ocr/json', exist_ok=True)
 os.makedirs('ocr/text', exist_ok=True)
 os.makedirs('ocr/debug', exist_ok=True)
+os.makedirs(OCR_MODEL_DIR, exist_ok=True)
 
-ocr = RapidOCR()
+providers = ort.get_available_providers()
+USE_CUDA = 'CUDAExecutionProvider' in providers
+
+ocr_kwargs = {
+    'det_use_cuda': USE_CUDA,
+    'cls_use_cuda': USE_CUDA,
+    'rec_use_cuda': USE_CUDA,
+}
+
+if os.path.exists(OCR_DET_MODEL_PATH):
+    ocr_kwargs['det_model_path'] = OCR_DET_MODEL_PATH
+
+if os.path.exists(OCR_REC_MODEL_PATH):
+    ocr_kwargs['rec_model_path'] = OCR_REC_MODEL_PATH
+
+if os.path.exists(OCR_REC_KEYS_PATH):
+    ocr_kwargs['rec_keys_path'] = OCR_REC_KEYS_PATH
+
+ocr = None
+
+
+def get_ocr():
+    global ocr
+    if ocr is None:
+        if VERBOSE:
+            print('init ocr in pid', os.getpid())
+        ocr = RapidOCR(**ocr_kwargs)
+    return ocr
 
 
 def get_duration(video_path):
@@ -54,6 +94,7 @@ def extract_frame(video_path, sec):
     cmd = [
         'ffmpeg',
         '-hide_banner',
+        '-nostdin',
         '-loglevel', 'error',
         '-ss', str(sec),
         '-i', video_path,
@@ -62,8 +103,16 @@ def extract_frame(video_path, sec):
         '-vcodec', 'png',
         '-',
     ]
-    out = subprocess.check_output(cmd)
-    return Image.open(io.BytesIO(out)).convert('RGB')
+    ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if ret.stdout:
+        try:
+            return Image.open(io.BytesIO(ret.stdout)).convert('RGB')
+        except Exception:
+            pass
+
+    err = ret.stderr.decode(errors='ignore').strip()
+    raise RuntimeError(err or f'ffmpeg failed for {video_path} @ {sec}s')
 
 
 def image_diff_ratio(img1, img2, size=(96, 96)):
@@ -81,8 +130,14 @@ def image_diff_ratio(img1, img2, size=(96, 96)):
 
 
 def ocr_frame(img):
+    if OCR_UPSCALE > 1:
+        img = img.resize(
+            (img.width * OCR_UPSCALE, img.height * OCR_UPSCALE),
+            Image.Resampling.LANCZOS,
+        )
+
     arr = np.array(img)
-    ret, _ = ocr(arr)
+    ret, _ = get_ocr()(arr)
 
     if not ret:
         return ''
@@ -117,14 +172,11 @@ def keep_zh_lines(text):
     return out
 
 
-def save_debug_pair(dt, sec, prev_frame, frame, diff_ratio, changed):
+def save_debug_pair(dt, sec, prev_frame, frame, diff_ratio):
     if not SAVE_DEBUG_FRAME:
         return
 
     if prev_frame is None:
-        return
-
-    if not changed:
         return
 
     debug_dir = f'ocr/debug/{dt}'
@@ -136,28 +188,29 @@ def save_debug_pair(dt, sec, prev_frame, frame, diff_ratio, changed):
     prev_path = f'{debug_dir}/{hhmmss}_prev_diff_{diff_str}.png'
     curr_path = f'{debug_dir}/{hhmmss}_curr_diff_{diff_str}.png'
 
-    prev_frame.save(prev_path)
+    # prev_frame.save(prev_path) # disable, redundant
     frame.save(curr_path)
 
 
-for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
+def process_video(video_path):
 
     if '【' not in video_path:
-        continue
+        return
 
     dt = re.findall(r'【\d+】', video_path)[0]
     FOUT = f'ocr/json/{dt}.json'
     FOUT2 = f'ocr/text/{dt}.txt'
 
-    if os.path.exists(FOUT):
+    if os.path.exists(FOUT) and not FORCE_RESET:
         with open(FOUT, 'r') as ifile:
             head = ifile.read()
 
         if head:
-            continue
+            return
 
     file_start = time.perf_counter()
-    print('OCR %s ... this may take a while.' % dt)
+    if VERBOSE:
+        print('OCR %s ... this may take a while.' % dt)
 
     duration = get_duration(video_path)
 
@@ -166,7 +219,8 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
     prev_text = None
 
     secs = list(range(0, int(duration) + 1, STEP_SEC))
-    for sec in tqdm(secs, desc=dt, unit='frame'):
+    sec_iter = secs if not SHOW_FRAME_TQDM else tqdm(secs, desc=dt, unit='frame')
+    for sec in sec_iter:
         try:
             frame = extract_frame(video_path, sec)
         except Exception as e:
@@ -185,17 +239,20 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
             diff_ratio = image_diff_ratio(prev_frame, frame)
             changed = diff_ratio >= SLIDE_DIFF_THRESHOLD
 
-        row = {
-            'sec': sec,
-            'hhmmss': sec_to_hhmmss(sec),
-            'diff_ratio': diff_ratio,
-            'text_raw': '',
-            'text_zh': [],
-        }
 
-        save_debug_pair(dt, sec, prev_frame, frame, diff_ratio, changed)
 
         if changed:
+
+            row = {
+                'sec': sec,
+                'hhmmss': sec_to_hhmmss(sec),
+                'diff_ratio': diff_ratio,
+                'text_raw': '',
+                'text_zh': [],
+            }
+
+
+            save_debug_pair(dt, sec, prev_frame, frame, diff_ratio)
             text_raw = ocr_frame(frame)
             text_zh = keep_zh_lines(text_raw)
 
@@ -228,4 +285,21 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
             ofile.write('\n')
 
     file_end = time.perf_counter()
-    print(f'  Finished {video_path} in {file_end - file_start:.2f} seconds.\n')
+    if VERBOSE:
+        print(f'  Finished {video_path} in {file_end - file_start:.2f} seconds.\n')
+
+
+if __name__ == '__main__':
+    video_paths = sorted(glob.glob(os.getenv('FOLDER') + '/*'))
+    video_paths = [x for x in video_paths if '【' in x]
+
+    print('RapidOCR providers:', providers)
+    print('RapidOCR use cuda:', USE_CUDA)
+
+    if N_WORKERS <= 1:
+        for video_path in video_paths:
+            process_video(video_path)
+    else:
+        ctx = mp.get_context('spawn')
+        with ctx.Pool(N_WORKERS, maxtasksperchild=MAX_TASKS_PER_CHILD) as pool:
+            list(tqdm(pool.imap_unordered(process_video, video_paths), total=len(video_paths), desc='videos', unit='video'))
