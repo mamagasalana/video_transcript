@@ -2,6 +2,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
 import os
+import glob
 
 @dataclass(frozen=True)
 class BatchItem:
@@ -24,7 +25,7 @@ def iter_items_from_files(iterables: Iterable[str] =None) -> Iterator[BatchItem]
     if iterables is not None:
         transcript_files = sorted(iterables)
     else:
-        transcript_files = sorted(glob.glob('transcript2/*.txt'))
+        transcript_files = sorted(glob.glob('transcripts/clean/*.txt'))
 
     for transcript_file in transcript_files:
         dt = os.path.basename(transcript_file).split('.')[0]

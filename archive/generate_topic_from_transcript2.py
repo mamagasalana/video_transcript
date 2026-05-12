@@ -19,7 +19,7 @@ load_dotenv()  # looks for .env in current working dir (or parents)
 to_simplified = OpenCC("t2s") 
 
 MODEL_PATH = os.getenv('MODEL_PATH')
-TRANSCRIPT_GLOB = "transcript/*.txt"  
+TRANSCRIPT_GLOB = "transcripts/raw/*.txt"  
 OUTPUT_PATH = 'result/'
 CTX = 9999
 GPU_LAYERS = -1
@@ -135,7 +135,7 @@ def normalize_zh_transcript(text: str) -> str:
     text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
     return to_simplified.convert(text2)
 
-for in_path in tqdm(sorted(glob.glob('transcript/*'))):
+for in_path in tqdm(sorted(glob.glob('transcripts/raw/*'))):
     dt = re.findall('\d+', in_path)[0]
     if len(sys.argv)  > 1:
         if dt != sys.argv[1]:
@@ -162,4 +162,3 @@ for in_path in tqdm(sorted(glob.glob('transcript/*'))):
 
     except Exception as e:
         print(f"  [{dt}] ERR: {e}")
-

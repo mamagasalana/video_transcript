@@ -41,8 +41,8 @@ model = WhisperModel(
     compute_type="float16"  # good balance of speed+accuracy on RTX GPUs
 )
 
-os.makedirs('transcript' , exist_ok=True)
-os.makedirs('transcript2' , exist_ok=True)
+os.makedirs('transcripts/raw' , exist_ok=True)
+os.makedirs('transcripts/clean' , exist_ok=True)
 
 for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
 
@@ -50,7 +50,7 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
         continue
     
     dt = re.findall(r'【\d+】', video_path)[0]
-    FOUT = f'transcript/{dt}.txt'
+    FOUT = f'transcripts/raw/{dt}.txt'
 
     if os.path.exists(FOUT):
         with open(FOUT, 'r') as ifile:
@@ -59,8 +59,8 @@ for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
         if head:
             continue
 
-    if os.path.exists(f'transcript2/{dt}.txt'):
-        os.remove(f'transcript2/{dt}.txt')
+    if os.path.exists(f'transcripts/clean/{dt}.txt'):
+        os.remove(f'transcripts/clean/{dt}.txt')
         
     file_start = time.perf_counter()   # tic for this file
     print("Transcribing %s ... this may take a while." % dt)
@@ -133,13 +133,13 @@ def wrap_by_whitespace(text: str, max_len: int = 30) -> str:
 
 
 # clean to make it readable
-for transcript_path in  tqdm(sorted(glob.glob('transcript/*'))):
+for transcript_path in  tqdm(sorted(glob.glob('transcripts/raw/*'))):
     with open(transcript_path, 'r') as ifile:
         transcript_raw =ifile.read()
 
 
     transcript_path2 = re.findall(r'\d+', transcript_path)[0]
-    out_file = os.path.join('transcript2', '%s.txt' % transcript_path2)
+    out_file = os.path.join('transcripts/clean', '%s.txt' % transcript_path2)
 
     if os.path.exists(out_file):
         with open(out_file, 'r') as ifile:

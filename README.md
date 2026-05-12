@@ -215,7 +215,7 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
 
 ## Running the current pipeline
 
-Put transcript files under `transcript2/`, then run:
+Put transcript files under `transcripts/clean/`, then run:
 
 ```bash
 python main/extract_instrument.py

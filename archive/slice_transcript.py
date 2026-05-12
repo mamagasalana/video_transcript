@@ -4,8 +4,8 @@ import glob
 import shutil
 
 
-INPUT_DIR = "transcript2"
-OUTPUT_DIR = "transcript3"
+INPUT_DIR = "transcripts/clean"
+OUTPUT_DIR = "transcripts/chunks"
 MAX_LEN = 2000
 OVERLAP = 100
 

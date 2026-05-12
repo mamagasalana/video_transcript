@@ -5,3 +5,5 @@ tiktoken
 plotly
 matplotlib
 kaleido
+rapidocr-onnxruntime
+paddlepaddle

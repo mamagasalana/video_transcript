@@ -14,8 +14,8 @@ from tqdm import tqdm
 load_dotenv()
 
 
-TRANSCRIPT_GLOB = 'transcript2/*'
-TRANSCRIPT_FOLDER = 'transcript2'
+TRANSCRIPT_GLOB = 'transcripts/clean/*'
+TRANSCRIPT_FOLDER = 'transcripts/clean'
 MODEL = 'deepseek-v4-flash'
 OUTPUT_PREFIX = '2026_04_24_t0'
 BATCHES = range(3)

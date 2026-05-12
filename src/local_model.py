@@ -169,5 +169,5 @@ if __name__ == "__main__":
     from template.template_20260202_1620 import SCHEMA_INSTRUMENT_RULES_EXTRACT as schema, TradingInstrument as ts
 
     app = LLAMA_CPP_API(ts, "instrument_only(extract)_chunk", schema)
-    for _ in app.run_batch('transcript/202007*'):
+    for _ in app.run_batch('transcripts/raw/202007*'):
         break

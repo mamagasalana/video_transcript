@@ -20,7 +20,7 @@ All 3 jobs should stay separate.
 
 Entry:
 
-- [main/extract_instrument.py](/home/ytee/test/video_transcript/main/extract_instrument.py)
+- [main/extract_instrument.py](/home/ytee/test/GuruArena/main/extract_instrument.py)
 
 Purpose:
 
@@ -66,8 +66,8 @@ The downstream problem is that Step 2 then trusts that over-specific norm and ta
 
 Entry:
 
-- [main/extract_classification.py](/home/ytee/test/video_transcript/main/extract_classification.py)
-- schema lives in [template/template_20260424_2026.py](/home/ytee/test/video_transcript/template/template_20260424_2026.py)
+- [main/extract_classification.py](/home/ytee/test/GuruArena/main/extract_classification.py)
+- schema lives in [template/template_20260424_2026.py](/home/ytee/test/GuruArena/template/template_20260424_2026.py)
 
 Purpose:
 

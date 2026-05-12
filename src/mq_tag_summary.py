@@ -84,7 +84,7 @@ if __name__ == '__main__':
     import pandas as pd
 
     ret = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-flash', classification_prefix='class8')
-    ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class8')
+    ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class9')
 
 
     df = pd.DataFrame.from_dict(ret['classification_map'], orient='index')

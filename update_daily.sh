@@ -1,4 +1,4 @@
-cd /home/ytee/test/video_transcript
+cd /home/ytee/test/GuruArena
 cp --update=none ~/ysg_backup/*.mp4 /home/ytee/test/ysg_backup/
 
 export CUDNN_PATH="/home/ytee/test/trade_bot/venv/lib/python3.11/site-packages/nvidia/cudnn/lib"
