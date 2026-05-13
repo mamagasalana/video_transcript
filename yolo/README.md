@@ -10,9 +10,12 @@ Folder layout:
 
 Use:
 
-1. run `pipelines/yolo/generate_yolo_dataset.py`
-2. label `screen`, `host`, `welcome_screen`
-3. run `pipelines/yolo/train_yolo_screen.py`
+1. run `pipelines/yolo/step1_generate_yolo_dataset.py`
+2. run `pipelines/yolo/step2_make_label_subset.py`
+3. label `screen`, `host`, `welcome_screen` in Label Studio
+4. run `pipelines/yolo/step4_label_studio_to_yolo.py`
+5. run `pipelines/yolo/step5_train_yolo_screen.py`
+6. run `pipelines/yolo/step6_predict_yolo_screen.py`
 
 YOLO label format:
 

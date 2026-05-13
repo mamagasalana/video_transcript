@@ -3,7 +3,7 @@ Label Studio quick start for screen-box labeling.
 1. make a small subset first
 
 ```bash
-venv/bin/python pipelines/yolo/make_label_subset.py
+venv/bin/python pipelines/yolo/step2_make_label_subset.py
 ```
 
 2. start label studio
@@ -44,7 +44,7 @@ HOME=/tmp/labelstudio_home venv/bin/label-studio start
 8. export annotations as JSON, then convert them into YOLO labels:
 
 ```bash
-venv/bin/python pipelines/yolo/label_studio_to_yolo.py
+venv/bin/python pipelines/yolo/step4_label_studio_to_yolo.py
 ```
 
 Current class mapping:
@@ -57,7 +57,14 @@ Current class mapping:
 
 ```bash
 cd /home/ytee/test/GuruArena
-venv/bin/python pipelines/yolo/train_yolo_screen.py
+venv/bin/python pipelines/yolo/step5_train_yolo_screen.py
+```
+
+10. run prediction preview:
+
+```bash
+cd /home/ytee/test/GuruArena
+venv/bin/python pipelines/yolo/step6_predict_yolo_screen.py
 ```
 
 This currently trains from:

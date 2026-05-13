@@ -22,30 +22,36 @@ import numpy as np
 import onnxruntime as ort
 import multiprocessing as mp
 from rapidocr_onnxruntime import RapidOCR
+from ultralytics import YOLO
 from tqdm import tqdm
 
 STEP_SEC = 30
 SLIDE_DIFF_THRESHOLD = 0.10
 SAVE_DEBUG_FRAME = True
 OCR_UPSCALE = 2
-OCR_MODEL_DIR = 'ocr/models'
+OCR_MODEL_DIR = str(ROOT / 'ocr' / 'models')
 OCR_DET_MODEL_PATH = f'{OCR_MODEL_DIR}/det.onnx'
 OCR_REC_MODEL_PATH = f'{OCR_MODEL_DIR}/rec.onnx'
 OCR_REC_KEYS_PATH = f'{OCR_MODEL_DIR}/dict.txt'
+YOLO_MODEL_PATH = str(ROOT / 'yolo' / 'runs' / 'screen_label_subset' / 'weights' / 'best.pt')
+YOLO_CONF = 0.25
+YOLO_IOU = 0.45
+HOST_OVERLAY_MAX = 0.20
+YOLO_DEVICE = 0
 WATERMARK_PATTERNS = [
     r'上帝影视',
     r'god\s*\\?$',
     r'上帝影视\s*god\s*\\?$',
 ]
-FORCE_RESET=1
-N_WORKERS = 5
+FORCE_RESET = 1
+N_WORKERS = 3
 SHOW_FRAME_TQDM = False
 VERBOSE = False
 MAX_TASKS_PER_CHILD = 1
 
-os.makedirs('ocr/json', exist_ok=True)
-os.makedirs('ocr/text', exist_ok=True)
-os.makedirs('ocr/debug', exist_ok=True)
+os.makedirs(str(ROOT / 'ocr' / 'json'), exist_ok=True)
+os.makedirs(str(ROOT / 'ocr' / 'text'), exist_ok=True)
+os.makedirs(str(ROOT / 'ocr' / 'debug'), exist_ok=True)
 os.makedirs(OCR_MODEL_DIR, exist_ok=True)
 
 providers = ort.get_available_providers()
@@ -67,6 +73,7 @@ if os.path.exists(OCR_REC_KEYS_PATH):
     ocr_kwargs['rec_keys_path'] = OCR_REC_KEYS_PATH
 
 ocr = None
+yolo = None
 
 
 def get_ocr():
@@ -76,6 +83,17 @@ def get_ocr():
             print('init ocr in pid', os.getpid())
         ocr = RapidOCR(**ocr_kwargs)
     return ocr
+
+
+def get_yolo():
+    global yolo
+    if yolo is None:
+        if not os.path.exists(YOLO_MODEL_PATH):
+            raise FileNotFoundError(f'YOLO model not found: {YOLO_MODEL_PATH}')
+        if VERBOSE:
+            print('init yolo in pid', os.getpid())
+        yolo = YOLO(YOLO_MODEL_PATH)
+    return yolo
 
 
 def get_duration(video_path):
@@ -137,62 +155,126 @@ def image_diff_ratio(img1, img2, size=(96, 96)):
     return diff / (255 * len(pa))
 
 
-def detect_screen_box(img):
-    arr = np.array(img)
-    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blur, 50, 150)
-
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    H, W = gray.shape[:2]
-    best = None
-    best_score = -1
-
-    for cnt in contours:
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-
-        if len(approx) < 4 or len(approx) > 6:
-            continue
-
-        x, y, w, h = cv2.boundingRect(approx)
-        area = w * h
-        if area < W * H * 0.04:
-            continue
-
-        ratio = w / max(h, 1)
-        if ratio < 0.9 or ratio > 3.2:
-            continue
-
-        if y > H * 0.82:
-            continue
-
-        cx = x + w / 2
-        if cx < W * 0.35:
-            continue
-
-        score = area
-        if score > best_score:
-            best_score = score
-            best = (x, y, w, h)
-
-    if best is None:
-        return None
-
-    x, y, w, h = best
-    pad_x = int(w * 0.02)
-    pad_y = int(h * 0.02)
-
-    x0 = max(0, x + pad_x)
-    y0 = max(0, y + pad_y)
-    x1 = min(W, x + w - pad_x)
-    y1 = min(H, y + h - pad_y)
-
+def normalize_box(x0, y0, x1, y1, W, H):
+    x0 = max(0, min(int(round(x0)), W))
+    y0 = max(0, min(int(round(y0)), H))
+    x1 = max(0, min(int(round(x1)), W))
+    y1 = max(0, min(int(round(y1)), H))
     if x1 <= x0 or y1 <= y0:
         return None
-
     return (x0, y0, x1, y1)
+
+
+def shrink_box(box, W, H, ratio=0.02):
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    w = x1 - x0
+    h = y1 - y0
+    pad_x = int(w * ratio)
+    pad_y = int(h * ratio)
+    return normalize_box(x0 + pad_x, y0 + pad_y, x1 - pad_x, y1 - pad_y, W, H)
+
+
+def box_area(box):
+    if box is None:
+        return 0
+    x0, y0, x1, y1 = box
+    return max(0, x1 - x0) * max(0, y1 - y0)
+
+
+def box_intersection(box1, box2):
+    if box1 is None or box2 is None:
+        return 0
+    ax0, ay0, ax1, ay1 = box1
+    bx0, by0, bx1, by1 = box2
+    x0 = max(ax0, bx0)
+    y0 = max(ay0, by0)
+    x1 = min(ax1, bx1)
+    y1 = min(ay1, by1)
+    if x1 <= x0 or y1 <= y0:
+        return 0
+    return (x1 - x0) * (y1 - y0)
+
+
+def host_overlay_ratio(screen_box, host_box):
+    area = box_area(screen_box)
+    if area <= 0:
+        return 0.0
+    return box_intersection(screen_box, host_box) / area
+
+
+def detect_layout(frame):
+    arr = np.array(frame)
+    H, W = arr.shape[:2]
+    full_screen_box = (0, 0, W, H)
+
+    result = get_yolo().predict(
+        source=arr,
+        conf=YOLO_CONF,
+        iou=YOLO_IOU,
+        device=YOLO_DEVICE,
+        verbose=False,
+    )[0]
+
+    names = result.names
+    screen_candidates = []
+    host_candidates = []
+
+    boxes = result.boxes
+    if boxes is not None:
+        xyxy = boxes.xyxy.cpu().numpy()
+        cls = boxes.cls.cpu().numpy().astype(int)
+        conf = boxes.conf.cpu().numpy()
+
+        for box_xyxy, cls_id, score in zip(xyxy, cls, conf):
+            label = names[int(cls_id)]
+            box = normalize_box(
+                box_xyxy[0], box_xyxy[1], box_xyxy[2], box_xyxy[3], W, H
+            )
+            if box is None:
+                continue
+
+            row = {
+                'label': label,
+                'box': box,
+                'score': float(score),
+            }
+            if label == 'screen':
+                screen_candidates.append(row)
+            elif label == 'host':
+                host_candidates.append(row)
+
+    screen_candidates = sorted(screen_candidates, key=lambda x: (box_area(x['box']), x['score']), reverse=True)
+    host_candidates = sorted(host_candidates, key=lambda x: (box_area(x['box']), x['score']), reverse=True)
+
+    screen_box = None
+    host_box = None
+    overlay_ratio = 0.0
+
+    if screen_candidates:
+        screen_box = shrink_box(screen_candidates[0]['box'], W, H, ratio=0.02)
+
+    if screen_box is not None:
+        best_host = None
+        best_overlay = 0.0
+        for row in host_candidates:
+            overlay = host_overlay_ratio(screen_box, row['box'])
+            if overlay > best_overlay:
+                best_overlay = overlay
+                best_host = row['box']
+        host_box = best_host
+        overlay_ratio = best_overlay
+
+    if host_box is None:
+        screen_box = full_screen_box
+        overlay_ratio = 0.0
+
+    return {
+        'screen_box': screen_box,
+        'host_box': host_box,
+        'host_overlay_ratio': overlay_ratio,
+    }
 
 
 def ocr_frame(img):
@@ -245,7 +327,7 @@ def save_debug_pair(dt, sec, prev_frame, frame, diff_ratio):
     if prev_frame is None:
         return
 
-    debug_dir = f'ocr/debug/{dt}'
+    debug_dir = str(ROOT / 'ocr' / 'debug' / dt)
     os.makedirs(debug_dir, exist_ok=True)
 
     hhmmss = sec_to_hhmmss(sec).replace(':', '')
@@ -262,7 +344,7 @@ def save_debug_crop(dt, sec, crop):
     if not SAVE_DEBUG_FRAME:
         return
 
-    debug_dir = f'ocr/debug/{dt}'
+    debug_dir = str(ROOT / 'ocr' / 'debug' / dt)
     os.makedirs(debug_dir, exist_ok=True)
     hhmmss = sec_to_hhmmss(sec).replace(':', '')
     crop_path = f'{debug_dir}/{hhmmss}_crop.png'
@@ -274,19 +356,28 @@ def crop_by_box(img, box):
     return img.crop((x0, y0, x1, y1))
 
 
-def save_debug_box(dt, sec, frame, box):
+def save_debug_box(dt, sec, frame, layout):
     if not SAVE_DEBUG_FRAME:
         return
 
-    debug_dir = f'ocr/debug/{dt}'
+    debug_dir = str(ROOT / 'ocr' / 'debug' / dt)
     os.makedirs(debug_dir, exist_ok=True)
     hhmmss = sec_to_hhmmss(sec).replace(':', '')
     box_path = f'{debug_dir}/{hhmmss}_box.png'
 
     arr = np.array(frame).copy()
-    if box is not None:
-        x0, y0, x1, y1 = box
+    screen_box = layout.get('screen_box')
+    host_box = layout.get('host_box')
+    overlay_ratio = layout.get('host_overlay_ratio', 0.0)
+
+    if screen_box is not None:
+        x0, y0, x1, y1 = screen_box
         cv2.rectangle(arr, (x0, y0), (x1, y1), (255, 0, 0), 4)
+        cv2.putText(arr, 'screen', (x0, max(30, y0 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 0, 0), 2)
+    if host_box is not None:
+        x0, y0, x1, y1 = host_box
+        cv2.rectangle(arr, (x0, y0), (x1, y1), (0, 0, 255), 4)
+        cv2.putText(arr, f'host {overlay_ratio:.2f}', (x0, max(30, y0 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
     Image.fromarray(arr).save(box_path)
 
 
@@ -296,8 +387,8 @@ def process_video(video_path):
         return
 
     dt = re.findall(r'【\d+】', video_path)[0]
-    FOUT = f'ocr/json/{dt}.json'
-    FOUT2 = f'ocr/text/{dt}.txt'
+    FOUT = str(ROOT / 'ocr' / 'json' / f'{dt}.json')
+    FOUT2 = str(ROOT / 'ocr' / 'text' / f'{dt}.txt')
 
     if os.path.exists(FOUT) and not FORCE_RESET:
         with open(FOUT, 'r') as ifile:
@@ -314,10 +405,10 @@ def process_video(video_path):
 
     samples = []
     prev_frame = None
-    prev_box = None
+    prev_screen_box = None
     prev_text = None
 
-    secs = list(range(0, int(duration) + 1, STEP_SEC))
+    secs = list(range(STEP_SEC, int(duration) + 1, STEP_SEC))
     sec_iter = secs if not SHOW_FRAME_TQDM else tqdm(secs, desc=dt, unit='frame')
     for sec in sec_iter:
         try:
@@ -332,12 +423,15 @@ def process_video(video_path):
 
         diff_ratio = None
         changed = False
-        screen_box = detect_screen_box(frame)
+        layout = detect_layout(frame)
+        screen_box = layout['screen_box']
+        host_box = layout['host_box']
+        overlay_ratio = layout['host_overlay_ratio']
         if prev_frame is None:
             changed = True
         else:
-            if prev_box is not None and screen_box is not None:
-                prev_crop = crop_by_box(prev_frame, prev_box)
+            if prev_screen_box is not None and screen_box is not None:
+                prev_crop = crop_by_box(prev_frame, prev_screen_box)
                 curr_crop = crop_by_box(frame, screen_box)
                 diff_ratio = image_diff_ratio(prev_crop, curr_crop)
             else:
@@ -352,32 +446,41 @@ def process_video(video_path):
                 'sec': sec,
                 'hhmmss': sec_to_hhmmss(sec),
                 'diff_ratio': diff_ratio,
+                'screen_box': screen_box,
+                'host_box': host_box,
+                'host_overlay_ratio': overlay_ratio,
                 'text_raw': '',
                 'text_zh': [],
             }
 
 
-            save_debug_box(dt, sec, frame, screen_box)
+            save_debug_box(dt, sec, frame, layout)
             save_debug_pair(dt, sec, prev_frame, frame, diff_ratio)
-            if screen_box is not None:
+            skip_reason = None
+
+            if screen_box is None and host_box is not None:
+                skip_reason = 'no_screen'
+            elif host_box is not None and overlay_ratio >= HOST_OVERLAY_MAX:
+                skip_reason = 'host_overlay'
+
+            row['skip_reason'] = skip_reason
+
+            if skip_reason is None and screen_box is not None:
                 frame2 = crop_by_box(frame, screen_box)
                 save_debug_crop(dt, sec, frame2)
-            else:
-                frame2 = frame
+                text_raw = ocr_frame(frame2)
+                text_zh = keep_zh_lines(text_raw)
 
-            text_raw = ocr_frame(frame2)
-            text_zh = keep_zh_lines(text_raw)
-
-            if text_zh:
-                now_text = '\n'.join(text_zh)
-                if now_text != prev_text:
-                    row['text_raw'] = text_raw
-                    row['text_zh'] = text_zh
-                    prev_text = now_text
+                if text_zh:
+                    now_text = '\n'.join(text_zh)
+                    if now_text != prev_text:
+                        row['text_raw'] = text_raw
+                        row['text_zh'] = text_zh
+                        prev_text = now_text
 
             samples.append(row)
         prev_frame = frame
-        prev_box = screen_box
+        prev_screen_box = screen_box
 
     with open(FOUT, 'w', encoding='utf-8') as ofile:
         json.dump({
@@ -408,9 +511,6 @@ if __name__ == '__main__':
 
     print('RapidOCR providers:', providers)
     print('RapidOCR use cuda:', USE_CUDA)
-
-    N_WORKERS = 1
-    video_paths = [x for x in video_paths if '20200721' in x]
     if N_WORKERS <= 1:
         for video_path in video_paths:
             process_video(video_path)
