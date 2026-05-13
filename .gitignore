@@ -22,6 +22,8 @@ src/make_label_subset.py
 yolo/images/train/*.png
 yolo/images/train_label/*.png
 venv/
-yolo/runs/screen_label_subset/*
+yolo/runs/screen_label_subset*/
+
 !yolo/runs/screen_label_subset/weights/
 !yolo/runs/screen_label_subset/weights/*.pt
+yolo/images/batches/

@@ -1,10 +1,15 @@
 Label Studio quick start for screen-box labeling.
 
-1. make a small subset first
+1. make a new batch first
 
 ```bash
 venv/bin/python pipelines/yolo/step2_make_label_subset.py
 ```
+
+This creates a new batch folder like:
+
+- `yolo/images/batches/batch_002`
+- `yolo/labels/batches/batch_002`
 
 2. start label studio
 
@@ -31,9 +36,13 @@ HOME=/tmp/labelstudio_home venv/bin/label-studio start
 </View>
 ```
 
-6. import images from:
+6. import images from the newest batch folder:
 
-- `yolo/images/train_label`
+- `yolo/images/batches/batch_XXX`
+
+Example:
+
+- `yolo/images/batches/batch_002`
 
 7. label these classes:
 
@@ -75,5 +84,6 @@ This currently trains from:
 
 Note:
 
+- `train_label` is now a merged training view built from all labeled batches
 - current `train` and `val` both point to the same labeled subset
 - this first run is mainly a smoke test before making a proper validation split

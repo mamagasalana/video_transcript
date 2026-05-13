@@ -16,10 +16,9 @@ import re
 import subprocess
 import io
 import random
+import shutil
 
 
-STEP_SEC = 60
-MAX_PER_VIDEO = 6
 VAL_RATIO = 0.2
 SEED = 1234
 
@@ -29,6 +28,12 @@ VAL_DIR = f'{IMAGE_ROOT}/val'
 LABEL_ROOT = str(ROOT / 'yolo' / 'labels')
 LABEL_TRAIN_DIR = f'{LABEL_ROOT}/train'
 LABEL_VAL_DIR = f'{LABEL_ROOT}/val'
+
+exit() # disabled
+
+for folder in [TRAIN_DIR, VAL_DIR, LABEL_TRAIN_DIR, LABEL_VAL_DIR]:
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
 
 os.makedirs(TRAIN_DIR, exist_ok=True)
 os.makedirs(VAL_DIR, exist_ok=True)
@@ -71,19 +76,8 @@ def extract_frame(video_path, sec):
     raise RuntimeError(err or f'ffmpeg failed for {video_path} @ {sec}s')
 
 
-def choose_secs(duration):
-    secs = list(range(0, int(duration) + 1, STEP_SEC))
-    if len(secs) <= MAX_PER_VIDEO:
-        return secs
-
-    out = []
-    if MAX_PER_VIDEO == 1:
-        return [secs[len(secs) // 2]]
-
-    for i in range(MAX_PER_VIDEO):
-        idx = round(i * (len(secs) - 1) / (MAX_PER_VIDEO - 1))
-        out.append(secs[idx])
-    return sorted(set(out))
+def choose_mid_sec(duration):
+    return max(0, int(round(duration / 2.0)))
 
 
 def sec_to_tag(sec):
@@ -97,13 +91,12 @@ def sec_to_tag(sec):
 video_paths = sorted(glob.glob(os.getenv('FOLDER') + '/*'))
 video_paths = [x for x in video_paths if '【' in x]
 
-TOTAL_MAX = 300
 all_items = []
-for video_path in tqdm(video_paths[:TOTAL_MAX]):
+for video_path in tqdm(video_paths):
     dt = re.findall(r'【\d+】', video_path)[0]
     duration = get_duration(video_path)
-    for sec in choose_secs(duration):
-        all_items.append((video_path, dt, sec))
+    sec = choose_mid_sec(duration)
+    all_items.append((video_path, dt, sec))
 
 random.shuffle(all_items)
 

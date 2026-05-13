@@ -9,11 +9,14 @@ import glob
 import json
 import os
 import re
+import shutil
+from collections import Counter
 
 
-FIN = str(ROOT / 'yolo' / 'labels' / 'project-1-at-2026-05-13-11-57-c79120dd.json')
-IMG_DIR = str(ROOT / 'yolo' / 'images' / 'train_label')
-LABEL_DIR = str(ROOT / 'yolo' / 'labels' / 'train_label')
+IMG_BATCH_ROOT = str(ROOT / 'yolo' / 'images' / 'batches')
+LABEL_BATCH_ROOT = str(ROOT / 'yolo' / 'labels' / 'batches')
+EXPORT_ARCHIVE_DIR = str(ROOT / 'yolo' / 'labels')
+LABEL_STUDIO_HOME = os.getenv('LABEL_STUDIO_HOME', str(ROOT / '.labelstudio_home'))
 
 LABEL_MAP = {
     'screen': 0,
@@ -27,14 +30,6 @@ def normalize_image_name(name):
     name = re.sub(r'^[0-9a-f]+-', '', name)
     name = name.replace('【', '').replace('】', '')
     return name
-
-
-def get_image_map():
-    out = {}
-    for path in glob.glob(f'{IMG_DIR}/*.png'):
-        base = os.path.basename(path)
-        out[normalize_image_name(base)] = base
-    return out
 
 
 def get_yolo_line(value, class_id):
@@ -51,22 +46,74 @@ def get_yolo_line(value, class_id):
     return f'{class_id} {x_center:.6f} {y_center:.6f} {w:.6f} {h:.6f}'
 
 
-os.makedirs(LABEL_DIR, exist_ok=True)
+def guess_latest_export():
+    patterns = [
+        str(ROOT / 'yolo' / 'labels' / 'project-*.json'),
+        str(Path(LABEL_STUDIO_HOME) / 'Downloads' / 'project-*.json'),
+        str(Path.home() / 'Downloads' / 'project-*.json'),
+    ]
+
+    files = []
+    for pattern in patterns:
+        files.extend(glob.glob(pattern))
+
+    files = sorted(set(files), key=os.path.getmtime, reverse=True)
+    if not files:
+        raise FileNotFoundError(
+            'cannot find Label Studio export json. '
+            'Expected something like project-*.json in '
+            f'{Path(LABEL_STUDIO_HOME) / "Downloads"}'
+        )
+    return files[0]
+
+
+def build_global_image_map():
+    out = {}
+    duplicates = []
+
+    for batch_img_dir in sorted(glob.glob(f'{IMG_BATCH_ROOT}/batch_*')):
+        batch_name = os.path.basename(batch_img_dir)
+        batch_label_dir = f'{LABEL_BATCH_ROOT}/{batch_name}'
+        os.makedirs(batch_label_dir, exist_ok=True)
+
+        for path in glob.glob(f'{batch_img_dir}/*.png'):
+            base = os.path.basename(path)
+            norm = normalize_image_name(base)
+            row = {
+                'batch_name': batch_name,
+                'image_path': path,
+                'image_base': base,
+                'label_path': f'{batch_label_dir}/{base.replace(".png", ".txt")}',
+            }
+            if norm in out:
+                duplicates.append(norm)
+            else:
+                out[norm] = row
+
+    return out, duplicates
+
+
+FIN = guess_latest_export()
+os.makedirs(EXPORT_ARCHIVE_DIR, exist_ok=True)
+ARCHIVE_PATH = str(Path(EXPORT_ARCHIVE_DIR) / os.path.basename(FIN))
+if os.path.abspath(FIN) != os.path.abspath(ARCHIVE_PATH):
+    shutil.copy2(FIN, ARCHIVE_PATH)
 
 with open(FIN, 'r', encoding='utf-8') as ifile:
     tasks = json.load(ifile)
 
-image_map = get_image_map()
+image_map, duplicates = build_global_image_map()
 written = 0
 missing = []
 unknown_labels = set()
+batch_counts = Counter()
 
 for task in tasks:
     image = task.get('data', {}).get('image', '')
     norm_name = normalize_image_name(image)
-    real_name = image_map.get(norm_name)
+    row = image_map.get(norm_name)
 
-    if real_name is None:
+    if row is None:
         missing.append(norm_name)
         continue
 
@@ -89,21 +136,32 @@ for task in tasks:
 
             lines.append(get_yolo_line(value, class_id))
 
-    fout = f'{LABEL_DIR}/{real_name.replace(".png", ".txt")}'
-    with open(fout, 'w', encoding='utf-8') as ofile:
+    with open(row['label_path'], 'w', encoding='utf-8') as ofile:
         ofile.write('\n'.join(lines))
         if lines:
             ofile.write('\n')
 
     written += 1
+    batch_counts[row['batch_name']] += 1
 
 print(f'loaded {len(tasks)} tasks from {FIN}')
-print(f'wrote {written} yolo label files into {LABEL_DIR}')
+print(f'wrote {written} yolo label files across all batches')
+print(f'archived export to {ARCHIVE_PATH}')
+
+if batch_counts:
+    print('written by batch:')
+    for batch_name, count in sorted(batch_counts.items()):
+        print(f'  {batch_name}: {count}')
 
 if missing:
     print(f'missing images: {len(missing)}')
     for x in missing[:10]:
         print('missing:', x)
+
+if duplicates:
+    print(f'duplicate normalized filenames across batches: {len(duplicates)}')
+    for x in duplicates[:10]:
+        print('duplicate:', x)
 
 if unknown_labels:
     print('unknown labels:', sorted(unknown_labels))

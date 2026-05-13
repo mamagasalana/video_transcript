@@ -6,6 +6,8 @@ Folder layout:
 - `yolo/images/val`
 - `yolo/labels/train`
 - `yolo/labels/val`
+- `yolo/images/batches/batch_001`
+- `yolo/labels/batches/batch_001`
 - `yolo/dataset_train_label.yaml`
 
 Use:
@@ -17,13 +19,24 @@ Use:
 5. run `pipelines/yolo/step5_train_yolo_screen.py`
 6. run `pipelines/yolo/step6_predict_yolo_screen.py`
 
+Batch notes:
+
+- `step2` creates a new batch like `batch_001`, `batch_002`, ...
+- each batch lives under:
+  - `yolo/images/batches/`
+  - `yolo/labels/batches/`
+- `step5` merges all labeled batches back into:
+  - `yolo/images/train_label`
+  - `yolo/labels/train_label`
+  before training
+
 YOLO label format:
 
 - one line per box
 - `class_id x_center y_center width height`
 - all box numbers normalized to `0~1`
 
-For the current labeled subset:
+Class mapping:
 
 - `0 = screen`
 - `1 = host`

@@ -6,6 +6,7 @@ plotly
 matplotlib
 kaleido
 rapidocr-onnxruntime
+onnxruntime-gpu==1.23.2
 paddlepaddle
 ultralytics
 label-studio

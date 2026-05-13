@@ -27,14 +27,14 @@ from tqdm import tqdm
 
 STEP_SEC = 30
 SLIDE_DIFF_THRESHOLD = 0.10
-SAVE_DEBUG_FRAME = True
+SAVE_DEBUG_FRAME = False
 OCR_UPSCALE = 2
 OCR_MODEL_DIR = str(ROOT / 'ocr' / 'models')
 OCR_DET_MODEL_PATH = f'{OCR_MODEL_DIR}/det.onnx'
 OCR_REC_MODEL_PATH = f'{OCR_MODEL_DIR}/rec.onnx'
 OCR_REC_KEYS_PATH = f'{OCR_MODEL_DIR}/dict.txt'
 YOLO_MODEL_PATH = str(ROOT / 'yolo' / 'runs' / 'screen_label_subset' / 'weights' / 'best.pt')
-YOLO_CONF = 0.25
+YOLO_CONF = 0.1
 YOLO_IOU = 0.45
 HOST_OVERLAY_MAX = 0.20
 YOLO_DEVICE = 0
@@ -145,14 +145,11 @@ def image_diff_ratio(img1, img2, size=(96, 96)):
     a = img1.convert('L').resize(size)
     b = img2.convert('L').resize(size)
 
-    pa = list(a.getdata())
-    pb = list(b.getdata())
+    pa = np.asarray(a, dtype=np.int16)
+    pb = np.asarray(b, dtype=np.int16)
 
-    diff = 0
-    for x, y in zip(pa, pb):
-        diff += abs(x - y)
-
-    return diff / (255 * len(pa))
+    diff = np.abs(pa - pb).sum()
+    return float(diff) / (255 * pa.size)
 
 
 def normalize_box(x0, y0, x1, y1, W, H):
@@ -511,6 +508,14 @@ if __name__ == '__main__':
 
     print('RapidOCR providers:', providers)
     print('RapidOCR use cuda:', USE_CUDA)
+    DEBUG = 1
+
+    if DEBUG:
+        video_paths = [x for x in video_paths if '20200721' in x]
+        SAVE_DEBUG_FRAME =True
+        N_WORKERS = 1
+        VERBOSE =True
+
     if N_WORKERS <= 1:
         for video_path in video_paths:
             process_video(video_path)
