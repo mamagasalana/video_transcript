@@ -188,14 +188,16 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
 
 ## Repository map
 
-### Main entry points
+### Pipeline entry points
 
-- `main/extract_instrument.py`
-  - Step 1 instrument extraction
-- `main/extract_classification.py`
-  - Step 2 taxonomy classification
-- `main/visualize.py`
-  - charts and output visualization
+- `pipelines/ocr_text`
+  - OCR extraction from video frames
+- `pipelines/yolo`
+  - dataset prep, label conversion, train, predict
+- `pipelines/llm`
+  - Step 1 extraction, Step 2 classification, visualization
+- `pipelines/transcript`
+  - transcript generation and cleanup
 
 ### Core logic
 
@@ -203,9 +205,9 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
   - extraction schema
   - classification schema
   - signal schema
-- `src/mq_tag_summary.py`
+- `src/llm/mq_tag_summary.py`
   - summary loading and tag aggregation
-- `src/openai_api.py`
+- `src/llm/openai_api.py`
   - batch LLM execution wrapper
 
 ### Workflow notes
@@ -218,9 +220,9 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
 Put transcript files under `transcripts/clean/`, then run:
 
 ```bash
-python main/extract_instrument.py
-python main/extract_classification.py
-python main/visualize.py
+python pipelines/llm/extract_instrument.py
+python pipelines/llm/extract_classification.py
+python pipelines/llm/visualize.py
 ```
 
 The main schemas currently live in:

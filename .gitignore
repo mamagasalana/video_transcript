@@ -17,3 +17,8 @@ outputs/viz/*.html
 outputs/viz/*.png
 ocr/debug/
 ocr/models/*.onnx
+yolo/images/val/
+src/make_label_subset.py
+yolo/images/train/*.png
+yolo/images/train_label/*.png
+venv/

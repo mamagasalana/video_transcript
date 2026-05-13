@@ -7,3 +7,16 @@ matplotlib
 kaleido
 rapidocr-onnxruntime
 paddlepaddle
+ultralytics
+label-studio
+python-dotenv
+Pillow
+opencv-python
+numpy
+pandas
+opencc-python-reimplemented
+nbformat>=4.2.0
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.7.0+cu128
+torchvision==0.22.0+cu128
+torchaudio==2.7.0+cu128

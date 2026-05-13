@@ -1,0 +1,42 @@
+import pandas as pd
+import json
+import glob
+import re
+import os
+
+def compile_signals(glob_pattern):
+    dfs =[]
+    for f in glob.glob(glob_pattern):
+        dt = os.path.basename(f).split('.')[0]
+        df  =pd.DataFrame(json.load(open(f, 'r'))['signals'])
+        df['dt'] =dt
+        dfs.append(df)
+    ret = pd.concat(dfs, ignore_index=True)
+    return ret
+
+def compile_instruments(glob_pattern):
+    dfs =[]
+    for f in glob.glob(glob_pattern):
+        dt = os.path.basename(f).split('.')[0]
+        df  =pd.DataFrame(json.load(open(f, 'r'))['instruments'])
+        df['dt'] =dt
+        dfs.append(df)
+    ret = pd.concat(dfs, ignore_index=True)
+    return ret
+
+if __name__ == '__main__':
+
+    compare = ['signal_with_instrument_deepseek-reasoner', 'signal_with_instrument_deepseek' ]
+    df1 = compile_signals(f'outputs/model_output/{compare[0]}/*.json')
+    df2 = compile_signals(f'outputs/model_output/{compare[1]}/*.json')
+
+    print(len(df1), len(df2))
+    SELECTED_COLUMNS = ['dt', 'instrument', 'instrument_normalized', 'intent', 'evidence', 'summary']
+    INDEX_COLUMNS = ['dt', 'instrument', 'instrument_normalized']
+
+    df1[SELECTED_COLUMNS].merge(
+        df2[SELECTED_COLUMNS], 
+        how='outer', 
+        left_on=INDEX_COLUMNS, 
+        right_on=INDEX_COLUMNS, 
+        suffixes=[ '_%s' % x for x in compare]).to_csv('comparison.csv', index=False)

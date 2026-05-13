@@ -1,0 +1,8 @@
+path: yolo
+train: images/train_label
+val: images/train_label
+
+names:
+  0: screen
+  1: host
+  2: welcome_screen

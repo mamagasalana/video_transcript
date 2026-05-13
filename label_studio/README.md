@@ -1,0 +1,72 @@
+Label Studio quick start for screen-box labeling.
+
+1. make a small subset first
+
+```bash
+venv/bin/python pipelines/yolo/make_label_subset.py
+```
+
+2. start label studio
+
+```bash
+HOME=/tmp/labelstudio_home venv/bin/label-studio start
+```
+
+3. open the web UI
+
+- usually: `http://localhost:8080`
+
+4. create a new project
+
+5. use this labeling config:
+
+```xml
+<View>
+  <Image name="image" value="$image"/>
+  <RectangleLabels name="label" toName="image">
+    <Label value="screen" background="red"/>
+    <Label value="host" background="blue"/>
+    <Label value="welcome_screen" background="green"/>
+  </RectangleLabels>
+</View>
+```
+
+6. import images from:
+
+- `yolo/images/train_label`
+
+7. label these classes:
+
+- `screen`
+- `host`
+- `welcome_screen`
+
+8. export annotations as JSON, then convert them into YOLO labels:
+
+```bash
+venv/bin/python pipelines/yolo/label_studio_to_yolo.py
+```
+
+Current class mapping:
+
+- `0 = screen`
+- `1 = host`
+- `2 = welcome_screen`
+
+9. train YOLO on the labeled subset:
+
+```bash
+cd /home/ytee/test/GuruArena
+venv/bin/python pipelines/yolo/train_yolo_screen.py
+```
+
+This currently trains from:
+
+- `yolo/images/train_label`
+- `yolo/labels/train_label`
+- `yolo/dataset_train_label.yaml`
+
+Note:
+
+- current `train` and `val` both point to the same labeled subset
+- this first run is mainly a smoke test before making a proper validation split

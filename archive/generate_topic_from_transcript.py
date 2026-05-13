@@ -8,7 +8,7 @@ import time
 import re
 from llama_cpp import Llama
 import re
-from src.schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
+from src.llm.schemas import SCHEMA_TOPIC_CHUNK_INSTRUCTIONS
 from tqdm import tqdm
 import sys
 from dotenv import load_dotenv
