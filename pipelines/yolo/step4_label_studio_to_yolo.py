@@ -93,6 +93,26 @@ def build_global_image_map():
     return out, duplicates
 
 
+def summarize_batches():
+    rows = []
+    for batch_img_dir in sorted(glob.glob(f'{IMG_BATCH_ROOT}/batch_*')):
+        batch_name = os.path.basename(batch_img_dir)
+        batch_label_dir = f'{LABEL_BATCH_ROOT}/{batch_name}'
+        img_files = sorted(glob.glob(f'{batch_img_dir}/*.png'))
+        label_files = sorted(glob.glob(f'{batch_label_dir}/*.txt'))
+        nonempty = 0
+        for path in label_files:
+            if os.path.getsize(path) > 0:
+                nonempty += 1
+        rows.append({
+            'batch_name': batch_name,
+            'images': len(img_files),
+            'labels': len(label_files),
+            'nonempty_labels': nonempty,
+        })
+    return rows
+
+
 FIN = guess_latest_export()
 os.makedirs(EXPORT_ARCHIVE_DIR, exist_ok=True)
 ARCHIVE_PATH = str(Path(EXPORT_ARCHIVE_DIR) / os.path.basename(FIN))
@@ -152,6 +172,16 @@ if batch_counts:
     print('written by batch:')
     for batch_name, count in sorted(batch_counts.items()):
         print(f'  {batch_name}: {count}')
+
+batch_rows = summarize_batches()
+if batch_rows:
+    print('batch status:')
+    for row in batch_rows:
+        print(
+            f"  {row['batch_name']}: "
+            f"{row['nonempty_labels']} labeled / {row['images']} images "
+            f"(txt files: {row['labels']})"
+        )
 
 if missing:
     print(f'missing images: {len(missing)}')

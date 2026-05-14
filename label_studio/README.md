@@ -85,5 +85,7 @@ This currently trains from:
 Note:
 
 - `train_label` is now a merged training view built from all labeled batches
+- `step5` uses all batch folders under `yolo/images/batches/`
+- if a batch should not be part of training, delete that batch first
 - current `train` and `val` both point to the same labeled subset
 - this first run is mainly a smoke test before making a proper validation split
