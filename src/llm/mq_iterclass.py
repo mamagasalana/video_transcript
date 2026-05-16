@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Iterable, Iterator, Optional
 import os
 import glob
 
@@ -32,4 +32,22 @@ def iter_items_from_files(iterables: Iterable[str] =None) -> Iterator[BatchItem]
         with open(transcript_file, 'r') as ifile:
             transcript = ifile.read()
         yield BatchItem(id=dt, text=transcript)
+
+def iter_items_from_files_with_helpers(
+    iterables: Iterable[str],
+    helpers: Iterable[str],
+) -> Iterator[BatchItem]:
+    transcript_files = sorted(iterables)
+    helper_values = list(helpers)
+
+    if len(helper_values) != len(transcript_files):
+        raise ValueError(
+            f"helpers length mismatch: {len(helper_values)} helpers for {len(transcript_files)} files"
+        )
+
+    for helper, transcript_file in zip(helper_values, transcript_files):
+        dt = os.path.basename(transcript_file).split('.')[0]
+        with open(transcript_file, 'r', encoding='utf-8') as ifile:
+            transcript = ifile.read()
+        yield BatchItem(id=dt, text=transcript, helper=helper)
         

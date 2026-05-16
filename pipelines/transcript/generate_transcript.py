@@ -10,27 +10,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from faster_whisper import WhisperModel
-import logging
 import glob
-import re
+import logging
+import multiprocessing as mp
 import os
+import re
 import time
 import torch
-from opencc import OpenCC
+from src.transcript.normalize_transcript import NormFinder
 from tqdm import tqdm
+import shutil
 
-to_simplified = OpenCC("t2s") 
+nf = NormFinder("")
 
 if not torch.cuda.is_available():
-    raise RuntimeError("No CUDA device available – cannot run on GPU.")
+    raise RuntimeError("No CUDA device available - cannot run on GPU.")
 
 root = logging.getLogger()
 root.setLevel(logging.INFO)
 
-# If handlers already exist, don't add another console handler
 ch = logging.StreamHandler()
 ch.setLevel(logging.INFO)
-
 formatter = logging.Formatter(
     "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -38,85 +38,75 @@ formatter = logging.Formatter(
 ch.setFormatter(formatter)
 root.addHandler(ch)
 
-# 1. Choose model size: "tiny", "base", "small", "medium", "large-v2"
-model_size = "large-v3-turbo"
+logging.getLogger("faster_whisper").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR)
+logging.getLogger("httpcore").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-# 2. Load model on GPU
-model = WhisperModel(
-    model_size,
-    device="cuda",        # "cuda" for GPU, "cpu" if no GPU
-    compute_type="float16"  # good balance of speed+accuracy on RTX GPUs
-)
+MODEL_SIZE = "large-v3-turbo"
+MODEL_DOWNLOAD_ROOT = str(ROOT / "models" / "faster-whisper")
+MODEL_LOCAL_FILES_ONLY = False
+MODEL_DEVICE = "cuda"
+MODEL_COMPUTE_TYPE = "float16"
+BEAM_SIZE = 5
+TRANSCRIBE_LANGUAGE = "zh"
+TRANSCRIBE_VAD_FILTER = True
 
-os.makedirs('transcripts/raw' , exist_ok=True)
-os.makedirs('transcripts/clean' , exist_ok=True)
+RAW_DIR = str(ROOT / "transcripts" / "raw")
+CLEAN_DIR = str(ROOT / "transcripts" / "clean")
 
-for video_path in sorted(glob.glob(os.getenv('FOLDER') + '/*')):
+N_WORKERS = 4
+MAX_TASKS_PER_CHILD = 1
+VERBOSE = False
+DEBUG = 0
+FORCE_RESET = 0
 
-    if '【' not in video_path:
-        continue
-    
-    dt = re.findall(r'【\d+】', video_path)[0]
-    FOUT = f'transcripts/raw/{dt}.txt'
+model = None
 
-    if os.path.exists(FOUT):
-        with open(FOUT, 'r') as ifile:
-            head = ifile.read()
-        
-        if head:
-            continue
 
-    if os.path.exists(f'transcripts/clean/{dt}.txt'):
-        os.remove(f'transcripts/clean/{dt}.txt')
-        
-    file_start = time.perf_counter()   # tic for this file
-    print("Transcribing %s ... this may take a while." % dt)
-    
-    segments, info = model.transcribe(
-        video_path,
-        beam_size=5,
-        vad_filter=False,   # turn off VAD
-        language="zh",
+def get_cached_model_dir():
+    repo_cache_dir = os.path.join(
+        MODEL_DOWNLOAD_ROOT,
+        "models--mobiuslabsgmbh--faster-whisper-large-v3-turbo",
     )
+    ref_path = os.path.join(repo_cache_dir, "refs", "main")
+    if os.path.isfile(ref_path):
+        with open(ref_path, "r", encoding="utf-8") as ifile:
+            revision = ifile.read().strip()
+        if revision:
+            snapshot_dir = os.path.join(repo_cache_dir, "snapshots", revision)
+            if os.path.isdir(snapshot_dir):
+                return snapshot_dir
 
-    print(f"Detected language: {info.language} ({info.language_probability:.2%})")
+    snapshots_dir = os.path.join(repo_cache_dir, "snapshots")
+    if os.path.isdir(snapshots_dir):
+        snapshot_names = sorted(
+            x for x in os.listdir(snapshots_dir)
+            if os.path.isdir(os.path.join(snapshots_dir, x))
+        )
+        if snapshot_names:
+            return os.path.join(snapshots_dir, snapshot_names[-1])
 
+    return None
 
-    with open(FOUT, 'w', encoding="utf-8") as ofile:
-        for segment in segments:    
-            ofile.write(segment.text.strip() + "\n")
-            
-    file_end = time.perf_counter()     # toc for this file
-    print(f"  Finished {video_path} in {file_end - file_start:.2f} seconds.\n")
-
-
-def normalize_zh_transcript(text: str) -> str:
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"\n\s*\n+", "\n\n", text.strip())
-
-    lines = [ln.strip() for ln in text.split("\n")]
-    out = []
-    for ln in lines:
-        if not ln:
-            out.append("")  
-            continue
-        if not out or out[-1] == "":
-            out.append(ln)
-            continue
-
-        
-        if not re.search(r"[。！？!?：:）\)]$", out[-1]) and len(out[-1]) < 60:
-            out[-1] = out[-1] + " " + ln
-        else:
-            out.append(ln)
-
-    text2 = "\n".join(out)
-    # text2 = re.sub(r"\n{3,}", "\n\n", text2).strip()
-    text2 = re.sub(r'\s+', ' ', text2).strip()
-    return to_simplified.convert(text2)
+def get_model():
+    global model
+    if model is None:
+        model_source = get_cached_model_dir() or MODEL_SIZE
+        if VERBOSE:
+            print(f"Loading Whisper model: {model_source}")
+            print(f"Whisper download_root: {MODEL_DOWNLOAD_ROOT}")
+        kwargs = {
+            "device": MODEL_DEVICE,
+            "compute_type": MODEL_COMPUTE_TYPE,
+        }
+        if model_source == MODEL_SIZE:
+            kwargs["download_root"] = MODEL_DOWNLOAD_ROOT
+            kwargs["local_files_only"] = MODEL_LOCAL_FILES_ONLY
+        model = WhisperModel(model_source, **kwargs)
+    return model
 
 def wrap_by_whitespace(text: str, max_len: int = 30) -> str:
-    # Split by any whitespace and drop empties
     tokens = re.findall(r"\S+", text)
 
     lines = []
@@ -139,24 +129,115 @@ def wrap_by_whitespace(text: str, max_len: int = 30) -> str:
     return "\n".join(lines)
 
 
-# clean to make it readable
-for transcript_path in  tqdm(sorted(glob.glob('transcripts/raw/*'))):
-    with open(transcript_path, 'r') as ifile:
-        transcript_raw =ifile.read()
+def process_video(video_path):
+    if "【" not in video_path:
+        return
+
+    dt = re.findall(r"【\d+】", video_path)[0]
+    fout = os.path.join(RAW_DIR, f"{dt}.txt")
+    clean_out = os.path.join(CLEAN_DIR, f"{dt.strip('【】')}.txt")
+
+    if not DEBUG and os.path.exists(fout) and os.path.getsize(fout) > 0:
+        return
+
+    if os.path.exists(clean_out):
+        os.remove(clean_out)
+
+    file_start = time.perf_counter()
+    if VERBOSE:
+        print(f"Transcribing {dt} ... this may take a while.")
+
+    segments, info = get_model().transcribe(
+        video_path,
+        beam_size=BEAM_SIZE,
+        vad_filter=TRANSCRIBE_VAD_FILTER,
+        language=TRANSCRIBE_LANGUAGE,
+    )
+
+    if VERBOSE:
+        print(f"Detected language: {info.language} ({info.language_probability:.2%})")
+
+    joined_text = "\n".join(
+        segment.text.strip()
+        for segment in segments
+        if segment.text and segment.text.strip()
+    )
+
+    with open(fout, "w", encoding="utf-8") as ofile:
+        ofile.write(joined_text)
+
+    file_end = time.perf_counter()
+    if VERBOSE:
+        print(f"  Finished {video_path} in {file_end - file_start:.2f} seconds.\n")
 
 
-    transcript_path2 = re.findall(r'\d+', transcript_path)[0]
-    out_file = os.path.join('transcripts/clean', '%s.txt' % transcript_path2)
+def clean_transcript_file(transcript_path):
+    with open(transcript_path, "r", encoding="utf-8") as ifile:
+        transcript_raw = ifile.read()
 
-    if os.path.exists(out_file):
-        with open(out_file, 'r') as ifile:
-            head = ifile.read()
-        
-        if head:
-            continue
-        
-    transcript_clean = normalize_zh_transcript(transcript_raw)
+    if not transcript_raw.strip():
+        return
+
+    transcript_path2 = re.findall(r"\d+", transcript_path)[0]
+    out_file = os.path.join(CLEAN_DIR, f"{transcript_path2}.txt")
+
+    if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+        return
+
+    transcript_clean = nf.normalize_zh_transcript(transcript_raw)
     transcript_clean2 = wrap_by_whitespace(transcript_clean, 60)
-    
-    with open(out_file, 'w') as ofile:
-        transcript_raw =ofile.write(transcript_clean2)
+
+    with open(out_file, "w", encoding="utf-8") as ofile:
+        ofile.write(transcript_clean2)
+
+
+if __name__ == "__main__":
+    video_paths = sorted(glob.glob(os.getenv("FOLDER") + "/*"))
+    video_paths = [x for x in video_paths if "【" in x]
+
+    DEBUG = 0
+    FORCE_RESET = 1
+
+    if FORCE_RESET:
+        print('deleing existing transcripts outputs ...')
+        for folder in[RAW_DIR, CLEAN_DIR]:
+            if os.path.isdir(folder):
+                shutil.rmtree(folder)
+
+    os.makedirs(RAW_DIR, exist_ok=True)
+    os.makedirs(CLEAN_DIR, exist_ok=True)
+
+    if DEBUG:
+        video_paths = [x for x in video_paths if "20260402" in x]
+        N_WORKERS = 1
+        VERBOSE = True
+    else:
+        filtered_video_paths = []
+        for video_path in video_paths:
+            dt_match = re.findall(r"【\d+】", video_path)
+            if not dt_match:
+                continue
+            fout = os.path.join(RAW_DIR, f"{dt_match[0]}.txt")
+            if os.path.exists(fout) and os.path.getsize(fout) > 0:
+                continue
+            filtered_video_paths.append(video_path)
+        video_paths = filtered_video_paths
+
+    if N_WORKERS <= 1:
+        for video_path in video_paths:
+            process_video(video_path)
+    else:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(N_WORKERS, maxtasksperchild=MAX_TASKS_PER_CHILD) as pool:
+            list(
+                tqdm(
+                    pool.imap_unordered(process_video, video_paths),
+                    total=len(video_paths),
+                    desc="videos",
+                    unit="video",
+                )
+            )
+
+    transcript_paths = sorted(glob.glob(os.path.join(RAW_DIR, "*")))
+    for transcript_path in tqdm(transcript_paths, desc="clean", unit="file"):
+        clean_transcript_file(transcript_path)

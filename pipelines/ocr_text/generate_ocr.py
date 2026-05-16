@@ -498,12 +498,8 @@ def process_video(video_path):
     FOUT2 = str(ROOT / 'ocr' / 'text' / f'{dt}.txt')
     debug_dir = str(ROOT / 'ocr' / 'debug' / dt)
 
-    if not DEBUG and os.path.exists(FOUT):
-        with open(FOUT, 'r') as ifile:
-            head = ifile.read()
-
-        if head:
-            return
+    if not DEBUG and os.path.exists(FOUT) and os.path.getsize(FOUT) > 0:
+        return
 
     # force reset delete entire folder, save debug frame only remove folder at runtime
     if SAVE_DEBUG_FRAME and os.path.isdir(debug_dir):
@@ -718,6 +714,17 @@ if __name__ == '__main__':
         N_WORKERS = 1
         VERBOSE =True
         SHOW_FRAME_TQDM = True
+    else:
+        filtered_video_paths = []
+        for video_path in video_paths:
+            dt_match = re.findall(r'【\d+】', video_path)
+            if not dt_match:
+                continue
+            fout = str(ROOT / 'ocr' / 'json' / f'{dt_match[0]}.json')
+            if os.path.exists(fout) and os.path.getsize(fout) > 0:
+                continue
+            filtered_video_paths.append(video_path)
+        video_paths = filtered_video_paths
 
     if N_WORKERS <= 1:
         for video_path in video_paths:

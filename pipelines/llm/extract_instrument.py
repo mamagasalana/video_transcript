@@ -7,10 +7,12 @@ if str(ROOT) not in sys.path:
 
 from dotenv import load_dotenv
 import glob
+import json
 import os
 
-from src.llm.mq_iterclass import iter_items_from_files
+from src.llm.mq_iterclass import iter_items_from_files_with_helpers
 from src.llm.openai_api import OPENAI_API_DEEPSEEK
+from src.transcript.normalize_transcript import NormFinder
 from template.template_20260424_2026 import (
     SCHEMA_INSTRUMENT_RULES_EXTRACT as schema,
     TradingInstrument as ts,
@@ -22,10 +24,12 @@ load_dotenv()
 
 
 TRANSCRIPT_GLOB = 'transcripts/clean/*'
-TRANSCRIPT_FOLDER = 'transcripts/clean'
+OCR_JSON_FOLDER = 'ocr/json'
 MODEL = 'deepseek-v4-flash'
-OUTPUT_PREFIX = '2026_04_24_t0'
+OUTPUT_PREFIX = '2026_04_24_t1'
 BATCHES = range(3)
+
+nf = NormFinder('')
 
 
 def build_apps():
@@ -49,6 +53,36 @@ def list_batch_dates():
     return sorted(batch_date)
 
 
+def build_ocr_text(dt: str) -> str:
+    ocr_path = os.path.join(OCR_JSON_FOLDER, f'【{dt}】.json')
+    if not os.path.exists(ocr_path):
+        return ''
+
+    try:
+        with open(ocr_path, 'r', encoding='utf-8') as ifile:
+            payload = json.load(ifile)
+    except Exception:
+        return ''
+
+    sorted_items = sorted(payload["data"].items(), key=lambda x: x[0])
+
+    snippets = []
+    for _, entry in sorted_items:
+        text_raw = entry.get('text_zh', [])
+        if text_raw:
+            snippets.append(''.join(text_raw))
+
+    return nf.normalize_zh_transcript('\n\n'.join(snippets).strip())
+
+
+def build_helper(dt: str):
+    helper = {}
+    ocr_text = build_ocr_text(dt)
+    if ocr_text:
+        helper['ocr_text'] = ocr_text
+    return json.dumps(helper, ensure_ascii=False)
+
+
 def run(batch_dates=None):
     apps = build_apps()
     errlist = []
@@ -59,14 +93,22 @@ def run(batch_dates=None):
     pbar = tqdm(batch_dates, desc='extract instrument', unit='day')
     for dt in pbar:
         files = []
-        files.extend(glob.glob(f'{TRANSCRIPT_FOLDER}/{dt}.txt'))
+        files.extend(glob.glob(f'transcripts/clean/{dt}.txt'))
         if not files:
             continue
+        files = sorted(files)
+        helpers = []
+        for transcript_file in files:
+            dt2 = os.path.basename(transcript_file).split('.')[0]
+            helpers.append(build_helper(dt2))
 
         for batch, app in apps.items():
             try:
                 pbar.set_postfix(dt=dt, batch=batch, files=len(files))
-                app.run_batch_multiprocess( iter_items_from_files(files), show_progress=False,)
+                app.run_batch_multiprocess(
+                    iter_items_from_files_with_helpers(files, helpers=helpers),
+                    show_progress=False,
+                )
             except Exception as e:
                 # pbar.write('error %s %s %s' % (dt, batch, e))
                 errlist.append((dt, batch, str(e)))
@@ -75,4 +117,4 @@ def run(batch_dates=None):
 
 
 if __name__ == '__main__':
-    run()
+    run(['20260402'])

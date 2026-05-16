@@ -24,3 +24,4 @@ yolo/images/train_label/*.png
 venv/
 yolo/runs/screen_label_subset*/
 yolo/images/batches/
+models/faster-whisper/
