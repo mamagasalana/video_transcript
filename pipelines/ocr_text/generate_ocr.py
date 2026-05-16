@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys
+from collections import Counter
+from enum import IntEnum
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -28,10 +30,14 @@ from tqdm import tqdm
 
 STEP_SEC = 30
 SLIDE_MATCH_THRESHOLD = 0.80
-RESCALED_SLIDE_MATCH_THRESHOLD = 0.5
+RESCALED_SLIDE_MATCH_THRESHOLD = 0.33
+OCR_CHAR_MATCH_RATIO_THRESHOLD = 0.70
+BOX_SCREEN_RATIO_THRESHOLD = (0.5 , 0.62)
+
 HOST_OVERLAY_MAX = 0.20
 HOST_IMAGE_RATIO_THRESHOLD = 0.10
-SAVE_DEBUG_FRAME = True
+SAVE_DEBUG_FRAME = 0
+DEBUG = 0
 
 OCR_UPSCALE = 2
 OCR_MODEL_DIR = str(ROOT / 'ocr' / 'models')
@@ -78,6 +84,12 @@ if os.path.exists(OCR_REC_KEYS_PATH):
 
 ocr = None
 yolo = None
+
+
+class CropRescaled(IntEnum):
+    NONE = 0
+    CLEARER = 1
+    BLURRIER = 2
 
 
 def get_ocr():
@@ -278,6 +290,7 @@ def detect_layout(frame):
     host_box = None
     overlay_ratio = 0.0
     image_ratio = 0.0
+    screen_box_ratio = 0.0
 
     if screen_candidates:
         screen_box = shrink_box(screen_candidates[0]['box'], W, H, ratio=0.02)
@@ -296,11 +309,15 @@ def detect_layout(frame):
     if host_box is not None and screen_box is not None:
         overlay_ratio = host_overlay_ratio(screen_box, host_box)
 
+    if screen_box is not None:
+        screen_box_ratio = (screen_box[3] - screen_box[1])/(screen_box[2] - screen_box[0])
+
     return {
         'screen_box': screen_box,
         'host_box': host_box,
         'host_overlay_ratio': overlay_ratio,
         'host_image_ratio': image_ratio,
+        'screen_box_ratio': screen_box_ratio,
     }
 
 
@@ -345,6 +362,69 @@ def keep_zh_lines(text):
         if re.search(r'[\u3400-\u4dbf\u4e00-\u9fff]', line):
             out.append(line)
     return out
+
+
+def ocr_char_match_ratio(old_zh, new_zh):
+    old_text = ''.join(old_zh)
+    new_text = ''.join(new_zh)
+
+    old_counter = Counter(old_text)
+    new_counter = Counter(new_text)
+
+    matched = 0
+    for ch in old_counter.keys() | new_counter.keys():
+        matched += min(old_counter[ch], new_counter[ch])
+
+    new_in_old = 0.0 if len(new_text) == 0 else matched / len(new_text)
+    old_in_new = 0.0 if len(old_text) == 0 else matched / len(old_text)
+
+    return {
+        'matched': matched,
+        'old_text': old_text,
+        'new_text': new_text,
+        'new_in_old': new_in_old,
+        'old_in_new': old_in_new,
+    }
+
+
+def is_fullscreen_box(screen_box, frame_size):
+    if screen_box is None or frame_size is None:
+        return False
+    return tuple(screen_box) == (0, 0, frame_size[0], frame_size[1])
+
+
+def build_data_entry(row):
+    return {
+        'hhmmss': row['hhmmss'],
+        'sec': row['sec'],
+        'text_raw': row['text_raw'],
+        'text_zh': list(row['text_zh']),
+        'quality_is_fullscreen': row['quality_is_fullscreen'],
+    }
+
+
+def find_matching_data_entry(data, text_zh):
+    best_key = None
+    best_ratio = None
+    best_stats = None
+
+    for key, entry in data.items():
+        stats = ocr_char_match_ratio(entry['text_zh'], text_zh)
+        ratio = min(stats['new_in_old'], stats['old_in_new'])
+
+        if best_ratio is None or ratio > best_ratio:
+            best_key = key
+            best_ratio = ratio
+            best_stats = stats
+
+    return best_key, best_ratio, best_stats
+
+
+def find_sample_row(samples, hhmmss):
+    for sample in samples:
+        if sample.get('hhmmss') == hhmmss:
+            return sample
+    return None
 
 
 def save_debug_pair(dt, sec, prev_frame, frame, diff_ratio):
@@ -418,7 +498,7 @@ def process_video(video_path):
     FOUT2 = str(ROOT / 'ocr' / 'text' / f'{dt}.txt')
     debug_dir = str(ROOT / 'ocr' / 'debug' / dt)
 
-    if os.path.exists(FOUT):
+    if not DEBUG and os.path.exists(FOUT):
         with open(FOUT, 'r') as ifile:
             head = ifile.read()
 
@@ -436,6 +516,7 @@ def process_video(video_path):
     duration = get_duration(video_path)
 
     samples = []
+    data = {}
     prev_frame = None
     prev_screen_box = None
     prev_text = None
@@ -460,8 +541,9 @@ def process_video(video_path):
         host_box = layout['host_box']
         overlay_ratio = layout['host_overlay_ratio']
         image_ratio = layout['host_image_ratio']
+        screen_box_ratio = layout['screen_box_ratio']
 
-        crop_rescaled =0
+        crop_rescaled = CropRescaled.NONE
         if prev_frame is None:
             changed = True
         else:
@@ -471,16 +553,16 @@ def process_video(video_path):
                 curr_crop = crop_by_box(frame, screen_box)
                 if curr_crop.size == frame.size and prev_crop.size != frame.size:
                     prev_crop =  Image.fromarray(cv2.resize(np.array(prev_crop), frame.size, interpolation=cv2.INTER_LINEAR))
-                    crop_rescaled = 1 #become clearer
+                    crop_rescaled = CropRescaled.CLEARER
                 elif curr_crop.size != frame.size and prev_crop.size == frame.size:
                     curr_crop =  Image.fromarray(cv2.resize(np.array(curr_crop), frame.size, interpolation=cv2.INTER_LINEAR))
-                    crop_rescaled = 2 #become blurer
+                    crop_rescaled = CropRescaled.BLURRIER
 
                 diff_ratio2 = image_diff_ratio2(prev_crop, curr_crop)
             else:
                 diff_ratio2 = image_diff_ratio2(prev_frame, frame)
 
-            if crop_rescaled:
+            if crop_rescaled != CropRescaled.NONE:
                 changed = diff_ratio2 < RESCALED_SLIDE_MATCH_THRESHOLD
             else:
                 changed = diff_ratio2 < SLIDE_MATCH_THRESHOLD
@@ -490,26 +572,38 @@ def process_video(video_path):
                 'sec': sec,
                 'hhmmss': sec_to_hhmmss(sec),
                 'diff_ratio2': diff_ratio2,
-                'crop_rescaled': crop_rescaled,
+                'crop_rescaled': int(crop_rescaled),
                 'screen_box': screen_box,
                 'host_box': host_box,
                 'host_overlay_ratio': overlay_ratio,
                 'host_image_ratio': image_ratio,
+                'screen_box_ratio': screen_box_ratio,
                 'remark': '',
-            'text_raw': '',
-            'text_zh': [],
+                'changed' : changed,
+                'frame_size': frame.size,
+                'ocr_match_found': False,
+                'ocr_match_hhmmss': None,
+                'ocr_match_ratio': None,
+                'ocr_match_new_in_old': None,
+                'ocr_match_old_in_new': None,
+                'quality_is_fullscreen': is_fullscreen_box(screen_box, frame.size),
+                'replaced_by': None,
+                'replaces': None,
         }
 
         skip_reason = None
         if screen_box is None:
             skip_reason = 'no_screen'
+        elif not (BOX_SCREEN_RATIO_THRESHOLD[0] < screen_box_ratio < BOX_SCREEN_RATIO_THRESHOLD[1]):
+            skip_reason = 'bad_screen'
+
         if overlay_ratio >= HOST_OVERLAY_MAX:
             skip_reason = 'host_overlay'
 
         row['skip_reason'] = skip_reason
-
+        # skip_reason = None
         if skip_reason is None:
-            if changed or (crop_rescaled == 1):
+            if changed or (crop_rescaled == CropRescaled.CLEARER):
                 save_debug_box(dt, sec, frame, layout)
                 save_debug_pair(dt, sec, prev_frame, frame, diff_ratio2)
                 frame2 = crop_by_box(frame, screen_box)
@@ -517,27 +611,47 @@ def process_video(video_path):
                 text_raw = ocr_frame(frame2)
                 text_zh = keep_zh_lines(text_raw)
 
-                if not changed: # send here by crop_rescaled
-                    last_text_idx = None
-                    for i in range(len(samples) - 1, -1, -1):
-                        if samples[i].get('text_zh'):
-                            last_text_idx = i
-                            break
-
-                    if last_text_idx is not None:
-                        old_row = samples[last_text_idx]
-                        old_row['text_raw'] = ''
-                        old_row['text_zh'] = []
-                        old_row['remark'] = f'blur_replaced_by_{row["hhmmss"]}'
-                        old_row['replaced_by'] = row['hhmmss']
-                        row['remark'] = f'blur_replacement_of_{old_row["hhmmss"]}'
-
                 if text_zh:
                     now_text = '\n'.join(text_zh)
                     if now_text != prev_text:
-                        row['text_raw'] = text_raw
-                        row['text_zh'] = text_zh
-                        prev_text = now_text
+                        match_key, match_ratio, match_stats = find_matching_data_entry(data, text_zh)
+                        # get best match ratio
+                        if match_key is not None and match_stats is not None:
+                            row['ocr_match_found'] = True
+                            row['ocr_match_hhmmss'] = match_key
+                            row['ocr_match_ratio'] = match_ratio
+                            row['ocr_match_new_in_old'] = match_stats['new_in_old']
+                            row['ocr_match_old_in_new'] = match_stats['old_in_new']
+
+                        # if match ratio > threshold, slide exist previously
+                        if (
+                            match_key is not None
+                            and match_stats is not None
+                            and match_ratio is not None
+                            and match_ratio >= OCR_CHAR_MATCH_RATIO_THRESHOLD
+                        ):
+                            old_entry = data[match_key]
+                            if row['quality_is_fullscreen'] and not old_entry.get('quality_is_fullscreen'):
+                                old_row = find_sample_row(samples, match_key)
+                                if old_row is not None:
+                                    old_row['remark'] = f'duplicate_replaced_by_{row["hhmmss"]}'
+                                    old_row['replaced_by'] = row['hhmmss']
+                                row['remark'] = f'duplicate_replacement_of_{match_key}'
+                                row['replaces'] = match_key
+                                data.pop(match_key, None)
+                                row_with_text = dict(row)
+                                row_with_text['text_raw'] = text_raw
+                                row_with_text['text_zh'] = text_zh
+                                data[row['hhmmss']] = build_data_entry(row_with_text)
+                                prev_text = now_text
+                            else:
+                                row['remark'] = f'duplicate_of_{match_key}'
+                        else:
+                            row_with_text = dict(row)
+                            row_with_text['text_raw'] = text_raw
+                            row_with_text['text_zh'] = text_zh
+                            data[row['hhmmss']] = build_data_entry(row_with_text)
+                            prev_text = now_text
             
                 prev_frame = frame
                 prev_screen_box = screen_box
@@ -550,12 +664,21 @@ def process_video(video_path):
             'video_path': video_path,
             'dt': dt,
             'step_sec': STEP_SEC,
-            'slide_match_threshold': SLIDE_MATCH_THRESHOLD,
+            'ratio': {
+                'slide_match_threshold': SLIDE_MATCH_THRESHOLD,
+                'rescaled_slide_match_threshold': RESCALED_SLIDE_MATCH_THRESHOLD,
+                'ocr_char_match_ratio_threshold': OCR_CHAR_MATCH_RATIO_THRESHOLD,
+                'box_screen_ratio_threshold': BOX_SCREEN_RATIO_THRESHOLD,
+                'host_overlay_max': HOST_OVERLAY_MAX,
+                'host_image_ratio_threshold': HOST_IMAGE_RATIO_THRESHOLD,
+            },
             'samples': samples,
+            'data': dict(sorted(data.items())),
         }, ofile, ensure_ascii=False, indent=2)
 
     with open(FOUT2, 'w', encoding='utf-8') as ofile:
-        for row in samples:
+        for hhmmss in sorted(data):
+            row = data[hhmmss]
             if not row.get('text_zh'):
                 continue
             ofile.write('[%s]\n' % row['hhmmss'])
@@ -574,8 +697,8 @@ if __name__ == '__main__':
 
     print('RapidOCR providers:', providers)
     print('RapidOCR use cuda:', USE_CUDA)
-    DEBUG = 1
-    FORCE_RESET = 1
+    DEBUG = 0
+    FORCE_RESET = 0
 
     if FORCE_RESET:
         print('deleing existing ocr outputs ...')
@@ -590,7 +713,7 @@ if __name__ == '__main__':
     os.makedirs(OCR_MODEL_DIR, exist_ok=True)
 
     if DEBUG:
-        video_paths = [x for x in video_paths if '20200729' in x]
+        video_paths = [x for x in video_paths if '20240117' in x]
         SAVE_DEBUG_FRAME =True
         N_WORKERS = 1
         VERBOSE =True

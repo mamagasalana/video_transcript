@@ -20,7 +20,7 @@ Use:
    then select the trained weight as current:
    ```bash
    mkdir -p yolo/weights
-   cp yolo/runs/screen_label_subset-3/weights/best.pt yolo/weights/current.pt
+   cp yolo/runs/screen_label_subset/weights/best.pt yolo/weights/current.pt
    ```
 6. run `pipelines/yolo/step6_predict_yolo_screen.py`
 
